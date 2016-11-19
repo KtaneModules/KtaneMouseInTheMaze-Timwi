@@ -1,0 +1,142 @@
+fileFormatVersion: 2
+guid: b57dc57b2f73520408727a361f884b4b
+timeCreated: 1471820452
+licenseType: Free
+ModelImporter:
+  serializedVersion: 19
+  fileIDToRecycleName:
+    100000: //RootNode
+    100002: PuzzleBackground
+    100004: AcceptButton
+    100006: AcceptHighlight
+    100008: ComponentKeypad
+    100010: Cube
+    100012: DownButton
+    100014: DownHighlight
+    100016: LeftButton
+    100018: LeftHighlight
+    100020: RightButton
+    100022: RightHighlight
+    100024: UpButton
+    100026: UpHighlight
+    100028: Display
+    400000: //RootNode
+    400002: PuzzleBackground
+    400004: AcceptButton
+    400006: AcceptHighlight
+    400008: ComponentKeypad
+    400010: Cube
+    400012: DownButton
+    400014: DownHighlight
+    400016: LeftButton
+    400018: LeftHighlight
+    400020: RightButton
+    400022: RightHighlight
+    400024: UpButton
+    400026: UpHighlight
+    400028: Display
+    2300000: PuzzleBackground
+    2300002: AcceptButton
+    2300004: AcceptHighlight
+    2300006: Cube
+    2300008: DownButton
+    2300010: DownHighlight
+    2300012: LeftButton
+    2300014: LeftHighlight
+    2300016: RightButton
+    2300018: RightHighlight
+    2300020: UpButton
+    2300022: UpHighlight
+    2300024: Display
+    3300000: PuzzleBackground
+    3300002: AcceptButton
+    3300004: AcceptHighlight
+    3300006: Cube
+    3300008: DownButton
+    3300010: DownHighlight
+    3300012: LeftButton
+    3300014: LeftHighlight
+    3300016: RightButton
+    3300018: RightHighlight
+    3300020: UpButton
+    3300022: UpHighlight
+    3300024: Display
+    4300000: PuzzleBackground
+    4300002: RightHighlight
+    4300004: LeftHighlight
+    4300006: DownHighlight
+    4300008: UpHighlight
+    4300010: AcceptHighlight
+    4300012: AcceptButton
+    4300014: UpButton
+    4300016: RightButton
+    4300018: DownButton
+    4300020: LeftButton
+    4300022: Cube
+    4300024: Display
+    7400000: Default Take
+    9500000: //RootNode
+  materials:
+    importMaterials: 1
+    materialName: 0
+    materialSearch: 1
+  animations:
+    legacyGenerateAnimations: 4
+    bakeSimulation: 0
+    resampleRotations: 1
+    optimizeGameObjects: 0
+    motionNodeName: 
+    animationImportErrors: 
+    animationImportWarnings: 
+    animationRetargetingWarnings: 
+    animationDoRetargetingWarnings: 0
+    animationCompression: 1
+    animationRotationError: 0.5
+    animationPositionError: 0.5
+    animationScaleError: 0.5
+    animationWrapMode: 0
+    extraExposedTransformPaths: []
+    clipAnimations: []
+    isReadable: 1
+  meshes:
+    lODScreenPercentages: []
+    globalScale: 0.1
+    meshCompression: 0
+    addColliders: 0
+    importBlendShapes: 1
+    swapUVChannels: 0
+    generateSecondaryUV: 0
+    useFileUnits: 1
+    optimizeMeshForGPU: 1
+    keepQuads: 0
+    weldVertices: 1
+    secondaryUVAngleDistortion: 8
+    secondaryUVAreaDistortion: 15.000001
+    secondaryUVHardAngle: 88
+    secondaryUVPackMargin: 4
+    useFileScale: 1
+  tangentSpace:
+    normalSmoothAngle: 60
+    normalImportMode: 0
+    tangentImportMode: 3
+  importAnimation: 1
+  copyAvatar: 0
+  humanDescription:
+    human: []
+    skeleton: []
+    armTwist: 0.5
+    foreArmTwist: 0.5
+    upperLegTwist: 0.5
+    legTwist: 0.5
+    armStretch: 0.05
+    legStretch: 0.05
+    feetSpacing: 0
+    rootMotionBoneName: 
+    hasTranslationDoF: 0
+  lastHumanDescriptionAvatarSource: {instanceID: 0}
+  animationType: 2
+  humanoidOversampling: 1
+  additionalBone: 0
+  userData: 
+  assetBundleName: 
+  assetBundleVariant: 
