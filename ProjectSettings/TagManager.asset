@@ -3,9 +3,7 @@
 --- !u!78 &1
 TagManager:
   serializedVersion: 2
-  tags:
-  - mod.bundle
-  - Interactive
+  tags: []
   layers:
   - Default
   - TransparentFX
@@ -33,11 +31,11 @@ TagManager:
   - 
   - 
   - 
-  - Layer_Maze
   - 
   - 
   - 
-  - CCTV
+  - 
+  - 
   - 
   m_SortingLayers:
   - name: Default

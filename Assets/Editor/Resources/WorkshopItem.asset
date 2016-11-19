@@ -11,11 +11,12 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5cf2299c8864afe4ab42466f546ae20d, type: 3}
   m_Name: WorkshopItem
   m_EditorClassIdentifier: 
-  WorkshopPublishedFileID: 752503895
+  WorkshopPublishedFileID: 0
   Title: Mouse In The Maze
-  Description: "A challenge for your 3-dimensional thinking!\n\nversion 1.0\n\nManual:
-    \r\nhttps://www.dropbox.com/s/24k6bazxotvy3v7/MouseInTheMaze.pdf?dl=0\n\r\nGamepad
-    is supported\n\r\nModule Type: MouseInTheMaze"
+  Description: "Oh no. There\u2019s a mouse in the maze.\n\nModule created and implemented
+    by Konqi, currently maintained by Timwi.\n\n[url=http://ktane.timwi.de/PDF/Mouse%20In%20The%20Maze.pdf]Manual
+    PDF[/url]\n[url=http://ktane.timwi.de/HTML/Mouse%20In%20The%20Maze.html]Manual
+    HTML[/url]"
   PreviewImage: {fileID: 2800000, guid: 322a59906a9a0f548aa41aca3c4b9557, type: 3}
   Tags:
   - Regular Module
