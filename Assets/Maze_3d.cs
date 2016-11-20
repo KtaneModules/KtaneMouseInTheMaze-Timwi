@@ -33,6 +33,8 @@ public class Maze_3d : MonoBehaviour
 
     void Update()
     {
+        if (!isActive)
+            return;
 
         //Floor and Ceiling
         Graphics.DrawMesh(
@@ -344,6 +346,9 @@ public class Maze_3d : MonoBehaviour
             switch (button)
             {
                 case 0:
+                    //TargetCamera.transform.localPosition = new Vector3(.07f, 2.2f, .07f);
+                    //TargetCamera.transform.Rotate(new Vector3(-90, 0, 0));
+                    //break;
                     switch (objectives[5])
                     {
                         case 0:
