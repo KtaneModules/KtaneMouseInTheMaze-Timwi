@@ -177,7 +177,7 @@ Transform:
   m_Children: []
   m_Father: {fileID: 0}
   m_RootOrder: 0
---- !u!1001 &327645952
+--- !u!1001 &443840340
 Prefab:
   m_ObjectHideFlags: 0
   serializedVersion: 2
@@ -186,7 +186,7 @@ Prefab:
     m_Modifications:
     - target: {fileID: 462714, guid: 9c273292deb4f0340bdf0b37cade9175, type: 2}
       propertyPath: m_LocalPosition.x
-      value: -0.0041
+      value: 0
       objectReference: {fileID: 0}
     - target: {fileID: 462714, guid: 9c273292deb4f0340bdf0b37cade9175, type: 2}
       propertyPath: m_LocalPosition.y

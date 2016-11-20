@@ -11,7 +11,7 @@ MonoBehaviour:
   m_Script: {fileID: 11500000, guid: 5cf2299c8864afe4ab42466f546ae20d, type: 3}
   m_Name: WorkshopItem
   m_EditorClassIdentifier: 
-  WorkshopPublishedFileID: 0
+  WorkshopPublishedFileID: 803537557
   Title: Mouse In The Maze
   Description: "Oh no. There\u2019s a mouse in the maze.\n\nModule created and implemented
     by Konqi, currently maintained by Timwi.\n\n[url=http://ktane.timwi.de/PDF/Mouse%20In%20The%20Maze.pdf]Manual

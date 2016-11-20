@@ -9,12 +9,9 @@ public class Maze_3d : MonoBehaviour
     public Material Mat;
     public Material MatWall;
     public Material MatSphere;
-    public string LayerName;
+    public MeshFilter Floor, OuterWalls, Ceiling, Sphere, XWall, ZWall, Torus;
+    public Light Light;
 
-    float factor = 0.74f;
-
-    MeshFilter[] myMeshFilters;
-    MeshFilter myFloor, myOuterWalls, myCeiling, mySphere, myXWall, myZWall, myTorus;
     int mLayer = 30;
 
     MaterialPropertyBlock myBlock;
@@ -25,21 +22,15 @@ public class Maze_3d : MonoBehaviour
     int XCam, ZCam, direction;
     Vector3 posXWall, posZWall, posSphere;
 
-    void Awake()
-    {
-        //mLayer = LayerMask.NameToLayer (LayerName);
-        Debug.Log("layer: " + mLayer);
-    }
-
     void Update()
     {
         if (!isActive)
             return;
 
-        //Floor and Ceiling
+        // Floor and Ceiling
         Graphics.DrawMesh(
-            myFloor.mesh,
-            myFloor.gameObject.transform.localToWorldMatrix,
+            Floor.mesh,
+            Floor.gameObject.transform.localToWorldMatrix,
             Mat,
             mLayer,
             TargetCamera,
@@ -48,8 +39,8 @@ public class Maze_3d : MonoBehaviour
             true,
             true);
         Graphics.DrawMesh(
-            myCeiling.mesh,
-            myCeiling.gameObject.transform.localToWorldMatrix,
+            Ceiling.mesh,
+            Ceiling.gameObject.transform.localToWorldMatrix,
             Mat,
             mLayer,
             TargetCamera,
@@ -58,8 +49,8 @@ public class Maze_3d : MonoBehaviour
             false,
             false);
         Graphics.DrawMesh(
-            myOuterWalls.mesh,
-            myOuterWalls.gameObject.transform.localToWorldMatrix,
+            OuterWalls.mesh,
+            OuterWalls.gameObject.transform.localToWorldMatrix,
             MatWall,
             mLayer,
             TargetCamera,
@@ -76,34 +67,37 @@ public class Maze_3d : MonoBehaviour
             {
                 if (horiWalls[i, j] == true)
                 {
-                    myXWall.gameObject.transform.Translate(new Vector3(-9f + 2f * i, +8f - 2f * j, 0f) * factor);
+                    XWall.transform.localPosition = new Vector3(.9f - .2f * i, 0f, .8f - .2f * j);
                     Graphics.DrawMesh(
-                        myXWall.mesh,
-                        myXWall.gameObject.transform.localToWorldMatrix,
+                        XWall.mesh,
+                        XWall.gameObject.transform.localToWorldMatrix,
                         MatWall,
                         mLayer,
-                        TargetCamera);
-                    myXWall.transform.position = posXWall;
-                    //myXWall.gameObject.transform.Translate (new Vector3 (9f-2f*i, -8+2f*j, 0f)*factor);
+                        TargetCamera,
+                        0,
+                        null,
+                        false,
+                        false);
                 }
                 if (vertWalls[i, j] == true)
                 {
-                    myZWall.gameObject.transform.Translate(new Vector3(9f - 2f * i, 8f - 2f * j, 0f) * factor);
+                    ZWall.transform.localPosition = new Vector3(.8f - .2f * j, 0f, .9f - .2f * i);
                     Graphics.DrawMesh(
-                        myZWall.mesh,
-                        myZWall.gameObject.transform.localToWorldMatrix,
+                        ZWall.mesh,
+                        ZWall.gameObject.transform.localToWorldMatrix,
                         MatWall,
                         mLayer,
-                        TargetCamera);
-                    myZWall.transform.position = posZWall;
-                    //myZWall.gameObject.transform.Translate (new Vector3 (-9f+2f*i,-8f+2f*j,0)*factor);
+                        TargetCamera,
+                        0,
+                        null,
+                        false,
+                        false);
                 }
             }
         }
 
-        //Spheres
+        // Spheres
         float x = 0;
-        float y = 1f;
         float z = 0;
         for (int i = 0; i <= 3; i++)
         {
@@ -126,28 +120,27 @@ public class Maze_3d : MonoBehaviour
             switch (i)
             {
                 case 0:
-                    x = -5;
-                    z = 5;
+                    x = .5f;
+                    z = -.5f;
                     break;
                 case 1:
-                    x = 5;
-                    z = 5;
+                    x = -.5f;
+                    z = -.5f;
                     break;
                 case 2:
-                    x = 5;
-                    z = -5;
+                    x = -.5f;
+                    z = .5f;
                     break;
                 case 3:
-                    x = -5;
-                    z = -5;
+                    x = .5f;
+                    z = .5f;
                     break;
             }
 
-            //mySphere.gameObject.transform.Rotate (new Vector3 (15f,45f,30f)*Time.deltaTime,Space.Self);
-            mySphere.gameObject.transform.Translate(new Vector3(x, y, z) * factor);
+            Sphere.transform.localPosition = new Vector3(x, .05f, z);
             Graphics.DrawMesh(
-                mySphere.mesh,
-                mySphere.gameObject.transform.localToWorldMatrix,
+                Sphere.mesh,
+                Sphere.gameObject.transform.localToWorldMatrix,
                 MatSphere,
                 mLayer,
                 TargetCamera,
@@ -155,14 +148,7 @@ public class Maze_3d : MonoBehaviour
                 myBlock,
                 false,
                 false);
-            mySphere.transform.position = posSphere;
-            //mySphere.gameObject.transform.Translate (new Vector3 (-x, -y, -z)*factor);
-
         }
-
-
-
-
 
         //Torus
         switch (objectives[4])
@@ -180,11 +166,10 @@ public class Maze_3d : MonoBehaviour
                 myBlock.SetColor("_Color", Color.yellow);
                 break;
         }
-        //myTorus.gameObject.transform.Translate (new Vector3 (0f, 0f, 0f)*factor);
-        myTorus.gameObject.transform.Rotate(new Vector3(15f, 45f, 30f) * 2 * Time.deltaTime);
+        Torus.gameObject.transform.Rotate(new Vector3(15f, 45f, 30f) * 2 * Time.deltaTime);
         Graphics.DrawMesh(
-            myTorus.mesh,
-            myTorus.gameObject.transform.localToWorldMatrix,
+            Torus.mesh,
+            Torus.gameObject.transform.localToWorldMatrix,
             Mat,
             mLayer,
             TargetCamera,
@@ -192,56 +177,10 @@ public class Maze_3d : MonoBehaviour
             myBlock,
             false,
             false);
-        //myTorus.gameObject.transform.Translate (new Vector3 (0f, 0f, 0f)*factor);
     }
 
     void Start()
     {
-        myMeshFilters = this.GetComponentsInChildren<MeshFilter>();
-        foreach (MeshFilter m in myMeshFilters)
-        {
-            if (m.gameObject.name == "Floor")
-            {
-                myFloor = m;
-                Debug.Log("Floor found");
-            }
-            if (m.gameObject.name == "outerWalls")
-            {
-                myOuterWalls = m;
-                Debug.Log("outerWalls found");
-            }
-            if (m.gameObject.name == "Ceiling")
-            {
-                myCeiling = m;
-                Debug.Log("Ceiling found");
-            }
-            if (m.gameObject.name == "XWall")
-            {
-                myXWall = m;
-                Debug.Log("XWall found");
-            }
-            if (m.gameObject.name == "ZWall")
-            {
-                myZWall = m;
-                Debug.Log("ZWall found");
-            }
-            if (m.gameObject.name == "Sphere")
-            {
-                mySphere = m;
-                Debug.Log("Sphere found");
-            }
-            if (m.gameObject.name == "Torus")
-            {
-                myTorus = m;
-                Debug.Log("Torus found");
-            }
-        }
-
-        posXWall = myXWall.transform.position;
-        posZWall = myZWall.transform.position;
-        posSphere = mySphere.transform.position;
-
-
         isActive = false;
 
         GetComponent<KMBombModule>().OnActivate += OnActivate;
@@ -255,37 +194,27 @@ public class Maze_3d : MonoBehaviour
 
         myBlock = new MaterialPropertyBlock();
 
-        XCam = (int) (Random.value * 9);    //unlikely to spawn in row 9
-        ZCam = (int) (Random.value * 9);
-
-
-        //XCam = 1;
-        //ZCam = 1;
-
-        TargetCamera.transform.Translate(new Vector3(8.75f - 2f * XCam, 0f, -9.4f + 2f * ZCam) * factor);
-
-        direction = (int) (Random.value * 4);
-        direction = (direction == 4) ? 3 : direction;
-
-        //direction = 0;
-
-        for (int i = 0; i < direction; i++)
-        {
-            TargetCamera.transform.Rotate(new Vector3(0f, -90f, 0f));
-        }
-
-
-
         generateMaze();
 
+        XCam = Random.Range(0, 10);
+        ZCam = Random.Range(0, 10);
+
+        // Start in a random direction, but not directly facing a wall.
+        direction = Random.Range(0, 4);
+        while (
+            direction == 0 ? (ZCam == 9 || horiWalls[XCam, ZCam]) :
+            direction == 1 ? (XCam == 9 || vertWalls[ZCam, XCam]) :
+            direction == 2 ? (ZCam == 0 || horiWalls[XCam, ZCam - 1]) :
+            direction == 3 ? (XCam == 0 || vertWalls[ZCam, XCam - 1]) : false)
+            direction = (direction + 1) % 4;
+
+        positionCamera();
     }
 
     void generateMaze()
     {
+        int mazeRand = Random.Range(0, 6);
 
-        int mazeRand = (int) (Random.value * 6);
-
-        Debug.Log("Maze: " + mazeRand);
         switch (mazeRand)
         {
             case 0:
@@ -330,13 +259,11 @@ public class Maze_3d : MonoBehaviour
     {
         GetComponent<KMBombModule>().HandlePass();
         isActive = false;
-        //Debug.Log ("Pass");
     }
 
     void strike()
     {
         GetComponent<KMBombModule>().HandleStrike();
-        //Debug.Log ("Strike");
     }
 
     void OnPress(int button)
@@ -377,80 +304,50 @@ public class Maze_3d : MonoBehaviour
                             break;
                     }
                     break;
+
+                // Move forward
                 case 1:
-                    if (direction == 0 && ZCam <= 8)
-                        if (!horiWalls[XCam, ZCam])
-                        {
-                            TargetCamera.transform.Translate(new Vector3(0f, 0f, 2f) * factor);
-                            ZCam++;
-                            Debug.Log("move");
-                        }
-                    if (direction == 1 && XCam <= 8)
-                        if (!vertWalls[ZCam, XCam])
-                        {
-                            TargetCamera.transform.Translate(new Vector3(0f, 0f, 2f) * factor);
-                            Debug.Log("move");
-                            XCam++;
-                        }
-                    if (direction == 2 && ZCam >= 1)
-                        if (!horiWalls[XCam, ZCam - 1])
-                        {
-                            TargetCamera.transform.Translate(new Vector3(0f, 0f, 2f) * factor);
-                            Debug.Log("move");
-                            ZCam--;
-                        }
-                    if (direction == 3 && XCam >= 1)
-                        if (!vertWalls[ZCam, XCam - 1])
-                        {
-                            TargetCamera.transform.Translate(new Vector3(0f, 0f, 2f) * factor);
-                            Debug.Log("move");
-                            XCam--;
-                        }
+                    if (direction == 0 && ZCam <= 8 && !horiWalls[XCam, ZCam])
+                        ZCam++;
+                    else if (direction == 1 && XCam <= 8 && !vertWalls[ZCam, XCam])
+                        XCam++;
+                    else if (direction == 2 && ZCam >= 1 && !horiWalls[XCam, ZCam - 1])
+                        ZCam--;
+                    else if (direction == 3 && XCam >= 1 && !vertWalls[ZCam, XCam - 1])
+                        XCam--;
                     break;
-                case 2:     //down
-                    if (direction == 2 && ZCam <= 8)
-                        if (!horiWalls[XCam, ZCam])
-                        {
-                            TargetCamera.transform.Translate(new Vector3(0f, 0f, -2f) * factor);
-                            ZCam++;
-                            Debug.Log("move");
-                        }
-                    if (direction == 3 && XCam <= 8)
-                        if (!vertWalls[ZCam, XCam])
-                        {
-                            TargetCamera.transform.Translate(new Vector3(0f, 0f, -2f) * factor);
-                            Debug.Log("move");
-                            XCam++;
-                        }
-                    if (direction == 0 && ZCam >= 1)
-                        if (!horiWalls[XCam, ZCam - 1])
-                        {
-                            TargetCamera.transform.Translate(new Vector3(0f, 0f, -2f) * factor);
-                            Debug.Log("move");
-                            ZCam--;
-                        }
-                    if (direction == 1 && XCam >= 1)
-                        if (!vertWalls[ZCam, XCam - 1])
-                        {
-                            TargetCamera.transform.Translate(new Vector3(0f, 0f, -2f) * factor);
-                            Debug.Log("move");
-                            XCam--;
-                        }
+
+                // Move backward
+                case 2:
+                    if (direction == 2 && ZCam <= 8 && !horiWalls[XCam, ZCam])
+                        ZCam++;
+                    else if (direction == 3 && XCam <= 8 && !vertWalls[ZCam, XCam])
+                        XCam++;
+                    else if (direction == 0 && ZCam >= 1 && !horiWalls[XCam, ZCam - 1])
+                        ZCam--;
+                    else if (direction == 1 && XCam >= 1 && !vertWalls[ZCam, XCam - 1])
+                        XCam--;
                     break;
-                case 3:     //left
-                    direction = (4 + direction - 1) % 4;
-                    TargetCamera.transform.Rotate(new Vector3(0f, 90f, 0f));
+
+                // Turn left
+                case 3:
+                    direction = (direction + 3) % 4;
                     break;
-                case 4:     //right
+
+                // Turn right
+                case 4:
                     direction = (direction + 1) % 4;
-                    TargetCamera.transform.Rotate(new Vector3(0f, -90f, 0f));
-                    break;
-                default:
                     break;
             }
-            Debug.Log("Direction: " + direction);
-            Debug.Log("x: " + XCam + "    Z: " + ZCam);
+
+            positionCamera();
         }
+    }
+
+    private void positionCamera()
+    {
+        TargetCamera.transform.localPosition = new Vector3(.9f - .2f * XCam, 0.05f, .9f - .2f * ZCam);
+        TargetCamera.transform.localEulerAngles = new Vector3(0, 90f * (direction + 2), 180);
     }
 
     void OnActivate()
@@ -686,8 +583,6 @@ public class Maze_3d : MonoBehaviour
 
     void generateMaze3()
     {
-
-        horiWalls[0, 0] = true;
         horiWalls[1, 0] = true;
         horiWalls[2, 0] = true;
         horiWalls[3, 0] = true;
@@ -1034,13 +929,11 @@ public class Maze_3d : MonoBehaviour
         horiWalls[4, 1] = true;
         horiWalls[5, 1] = true;
         horiWalls[8, 1] = true;
-        horiWalls[9, 1] = true;
         horiWalls[1, 2] = true;
         horiWalls[2, 2] = true;
         horiWalls[3, 2] = true;
         horiWalls[4, 2] = true;
         horiWalls[6, 2] = true;
-        horiWalls[9, 2] = true;
         horiWalls[2, 3] = true;
         horiWalls[5, 3] = true;
         horiWalls[7, 3] = true;
