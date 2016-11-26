@@ -189,7 +189,6 @@ public class Maze_3d : MonoBehaviour
         {
             int j = i;
             buttons[i].OnInteract += delegate () { OnPress(j); return false; };
-            buttons[i].AddInteractionPunch();
         }
 
         myBlock = new MaterialPropertyBlock();
@@ -268,14 +267,14 @@ public class Maze_3d : MonoBehaviour
 
     void OnPress(int button)
     {
+        GetComponent<KMAudio>().PlayGameSoundAtTransform(KMSoundOverride.SoundEffect.ButtonPress, buttons[button].transform);
+
         if (isActive)
         {
+            buttons[button].AddInteractionPunch(.5f);
             switch (button)
             {
                 case 0:
-                    //TargetCamera.transform.localPosition = new Vector3(.07f, 2.2f, .07f);
-                    //TargetCamera.transform.Rotate(new Vector3(-90, 0, 0));
-                    //break;
                     switch (objectives[5])
                     {
                         case 0:
