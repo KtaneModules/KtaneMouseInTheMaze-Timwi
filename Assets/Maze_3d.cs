@@ -20,7 +20,6 @@ public class Maze_3d : MonoBehaviour
     bool[,] horiWalls = new bool[10, 9];
     int[] objectives = new int[6];          //0:white 1:green 2:blue 3: yellow    Array:[color of position 0-3, col of Torus, position of goal]
     int XCam, ZCam, direction;
-    Vector3 posXWall, posZWall, posSphere;
 
     void Update()
     {
@@ -67,7 +66,19 @@ public class Maze_3d : MonoBehaviour
             {
                 if (horiWalls[i, j] == true)
                 {
+                    XWall.transform.localEulerAngles = new Vector3(270, 0, 0);
                     XWall.transform.localPosition = new Vector3(.9f - .2f * i, 0f, .8f - .2f * j);
+                    Graphics.DrawMesh(
+                        XWall.mesh,
+                        XWall.gameObject.transform.localToWorldMatrix,
+                        MatWall,
+                        mLayer,
+                        TargetCamera,
+                        0,
+                        null,
+                        false,
+                        false);
+                    XWall.transform.localEulerAngles = new Vector3(270, 180, 0);
                     Graphics.DrawMesh(
                         XWall.mesh,
                         XWall.gameObject.transform.localToWorldMatrix,
@@ -81,7 +92,19 @@ public class Maze_3d : MonoBehaviour
                 }
                 if (vertWalls[i, j] == true)
                 {
+                    ZWall.transform.localEulerAngles = new Vector3(270, 90, 0);
                     ZWall.transform.localPosition = new Vector3(.8f - .2f * j, 0f, .9f - .2f * i);
+                    Graphics.DrawMesh(
+                        ZWall.mesh,
+                        ZWall.gameObject.transform.localToWorldMatrix,
+                        MatWall,
+                        mLayer,
+                        TargetCamera,
+                        0,
+                        null,
+                        false,
+                        false);
+                    ZWall.transform.localEulerAngles = new Vector3(270, 270, 0);
                     Graphics.DrawMesh(
                         ZWall.mesh,
                         ZWall.gameObject.transform.localToWorldMatrix,
@@ -250,9 +273,7 @@ public class Maze_3d : MonoBehaviour
                 break;
             }
         }
-
     }
-
 
     void isSolved()
     {
@@ -275,6 +296,9 @@ public class Maze_3d : MonoBehaviour
             switch (button)
             {
                 case 0:
+                    //TargetCamera.transform.localPosition = new Vector3(.07f, 2.2f, .07f);
+                    //TargetCamera.transform.Rotate(new Vector3(-90, 0, 0));
+                    //return;
                     switch (objectives[5])
                     {
                         case 0:
