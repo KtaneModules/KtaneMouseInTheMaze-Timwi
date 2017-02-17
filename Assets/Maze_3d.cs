@@ -21,6 +21,9 @@ public class Maze_3d : MonoBehaviour
     int[] objectives = new int[6];          //0:white 1:green 2:blue 3: yellow    Array:[color of position 0-3, col of Torus, position of goal]
     int XCam, ZCam, direction;
 
+    private static int _moduleIdCounter = 1;
+    private int _moduleId;
+
     void Update()
     {
         if (!isActive)
@@ -204,6 +207,7 @@ public class Maze_3d : MonoBehaviour
 
     void Start()
     {
+        _moduleId = _moduleIdCounter++;
         isActive = false;
 
         GetComponent<KMBombModule>().OnActivate += OnActivate;
@@ -236,6 +240,7 @@ public class Maze_3d : MonoBehaviour
     void generateMaze()
     {
         int mazeRand = Random.Range(0, 6);
+        Debug.LogFormat("[Mouse in the Maze #{1}] You are in the {0} maze.", "top left|middle left|bottom left|top right|middle right|bottom right".Split('|')[mazeRand], _moduleId);
 
         switch (mazeRand)
         {
@@ -262,6 +267,9 @@ public class Maze_3d : MonoBehaviour
                 break;
         }
         //generateMaze7 ();
+
+        Debug.LogFormat("[Mouse in the Maze #{1}] Torus color: {0}", "white|green|blue|yellow".Split('|')[objectives[4]], _moduleId);
+        Debug.LogFormat("[Mouse in the Maze #{1}] Goal sphere color: {0}", "white|green|blue|yellow".Split('|')[objectives[5]], _moduleId);
 
         //this is not specific for each maze
         //Aim position in objectiv[5]
