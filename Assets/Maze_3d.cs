@@ -1,4 +1,9 @@
-﻿using UnityEngine;
+﻿using System;
+using System.Collections;
+using System.Collections.Generic;
+using UnityEngine;
+
+using Random = UnityEngine.Random;
 
 public class Maze_3d : MonoBehaviour
 {
@@ -12,17 +17,31 @@ public class Maze_3d : MonoBehaviour
     public MeshFilter Floor, OuterWalls, Ceiling, Sphere, XWall, ZWall, Torus;
     public Light Light;
 
-    int mLayer = 30;
+    const int mLayer = 30;
 
     MaterialPropertyBlock myBlock;
 
     bool[,] vertWalls = new bool[10, 9];
     bool[,] horiWalls = new bool[10, 9];
-    int[] objectives = new int[6];          //0:white 1:green 2:blue 3: yellow    Array:[color of position 0-3, col of Torus, position of goal]
-    int XCam, ZCam, direction;
+    int[] sphereColors = new int[4];    //0:white 1:green 2:blue 3: yellow; clockwise order from top-left
+    int torusColor;
+    int goalPosition;
+    CameraPosition curCam;
 
     private static int _moduleIdCounter = 1;
     private int _moduleId;
+    private bool _isSolved = false;
+
+    sealed class CameraPosition
+    {
+        public int X;
+        public int Z;
+        public int Direction;
+        public Vector3 Position { get { return new Vector3(.9f - .2f * X, 0.05f, .9f - .2f * Z); } }
+        public Quaternion Rotation { get { return Quaternion.Euler(0, 90f * (Direction + 2), 180); } }
+    }
+
+    private Queue<CameraPosition> _queue = new Queue<CameraPosition>();
 
     void Update()
     {
@@ -127,7 +146,7 @@ public class Maze_3d : MonoBehaviour
         float z = 0;
         for (int i = 0; i <= 3; i++)
         {
-            switch (objectives[i])
+            switch (sphereColors[i])
             {
                 case 0:
                     myBlock.SetColor("_Color", Color.white);
@@ -139,7 +158,7 @@ public class Maze_3d : MonoBehaviour
                     myBlock.SetColor("_Color", Color.blue);
                     break;
                 case 3:
-                    myBlock.SetColor("_Color", Color.yellow);
+                    myBlock.SetColor("_Color", new Color(1, .7f, 0));
                     break;
             }
 
@@ -177,7 +196,7 @@ public class Maze_3d : MonoBehaviour
         }
 
         //Torus
-        switch (objectives[4])
+        switch (torusColor)
         {
             case 0:
                 myBlock.SetColor("_Color", Color.white);
@@ -189,7 +208,7 @@ public class Maze_3d : MonoBehaviour
                 myBlock.SetColor("_Color", Color.blue);
                 break;
             case 3:
-                myBlock.SetColor("_Color", Color.yellow);
+                myBlock.SetColor("_Color", new Color(1, .5f, 0));
                 break;
         }
         Torus.gameObject.transform.Rotate(new Vector3(15f, 45f, 30f) * 2 * Time.deltaTime);
@@ -222,19 +241,22 @@ public class Maze_3d : MonoBehaviour
 
         generateMaze();
 
-        XCam = Random.Range(0, 10);
-        ZCam = Random.Range(0, 10);
+        var x = Random.Range(0, 10);
+        var z = Random.Range(0, 10);
 
         // Start in a random direction, but not directly facing a wall.
-        direction = Random.Range(0, 4);
+        var direction = Random.Range(0, 4);
         while (
-            direction == 0 ? (ZCam == 9 || horiWalls[XCam, ZCam]) :
-            direction == 1 ? (XCam == 9 || vertWalls[ZCam, XCam]) :
-            direction == 2 ? (ZCam == 0 || horiWalls[XCam, ZCam - 1]) :
-            direction == 3 ? (XCam == 0 || vertWalls[ZCam, XCam - 1]) : false)
+            direction == 0 ? (z == 9 || horiWalls[x, z]) :
+            direction == 1 ? (x == 9 || vertWalls[z, x]) :
+            direction == 2 ? (z == 0 || horiWalls[x, z - 1]) :
+            direction == 3 ? (x == 0 || vertWalls[z, x - 1]) : false)
             direction = (direction + 1) % 4;
 
-        positionCamera();
+        curCam = new CameraPosition { X = x, Z = z, Direction = direction };
+        TargetCamera.transform.localPosition = curCam.Position;
+        TargetCamera.transform.localRotation = curCam.Rotation;
+        StartCoroutine(positionCamera(curCam));
     }
 
     void generateMaze()
@@ -259,38 +281,24 @@ public class Maze_3d : MonoBehaviour
             case 4:
                 generateMaze5();
                 break;
-            case 5:
+            default:
                 generateMaze6();
                 break;
-            default:
-                generateMaze1();
-                break;
         }
-        //generateMaze7 ();
 
-        Debug.LogFormat("[Mouse in the Maze #{1}] Torus color: {0}", "white|green|blue|yellow".Split('|')[objectives[4]], _moduleId);
-        Debug.LogFormat("[Mouse in the Maze #{1}] Goal sphere color: {0}", "white|green|blue|yellow".Split('|')[objectives[5]], _moduleId);
-
-        //this is not specific for each maze
-        //Aim position in objectiv[5]
-        for (int i = 0; i <= 3; i++)
-        {
-            if (objectives[i] == objectives[5])
-            {
-                objectives[5] = i;
-                break;
-            }
-        }
+        Debug.LogFormat("[Mouse in the Maze #{1}] Torus color: {0}", "white|green|blue|yellow".Split('|')[torusColor], _moduleId);
+        Debug.LogFormat("[Mouse in the Maze #{1}] Goal sphere color: {0}", "white|green|blue|yellow".Split('|')[sphereColors[goalPosition]], _moduleId);
     }
 
-    void isSolved()
+    void solve()
     {
         GetComponent<KMBombModule>().HandlePass();
-        isActive = false;
+        _isSolved = true;
     }
 
-    void strike()
+    void strike(int x, int z)
     {
+        Debug.LogFormat("[Mouse in the Maze #{0}] Strike because you pressed Submit on {1},{2} but the solution is {3},{4}.", _moduleId, curCam.X, curCam.Z, x, z);
         GetComponent<KMBombModule>().HandleStrike();
     }
 
@@ -298,8 +306,12 @@ public class Maze_3d : MonoBehaviour
     {
         GetComponent<KMAudio>().PlayGameSoundAtTransform(KMSoundOverride.SoundEffect.ButtonPress, buttons[button].transform);
 
-        if (isActive)
+        if (isActive && !_isSolved)
         {
+            var x = curCam.X;
+            var z = curCam.Z;
+            var dir = curCam.Direction;
+
             buttons[button].AddInteractionPunch(.5f);
             switch (button)
             {
@@ -307,78 +319,97 @@ public class Maze_3d : MonoBehaviour
                     //TargetCamera.transform.localPosition = new Vector3(.07f, 2.2f, .07f);
                     //TargetCamera.transform.Rotate(new Vector3(-90, 0, 0));
                     //return;
-                    switch (objectives[5])
+                    switch (goalPosition)
                     {
                         case 0:
-                            if (XCam == 2 && ZCam == 7)
-                                isSolved();
+                            if (x == 2 && z == 7)
+                                solve();
                             else
-                                strike();
+                                strike(2, 7);
                             break;
                         case 1:
-                            if (XCam == 7 && ZCam == 7)
-                                isSolved();
+                            if (x == 7 && z == 7)
+                                solve();
                             else
-                                strike();
+                                strike(7, 7);
                             break;
                         case 2:
-                            if (XCam == 7 && ZCam == 2)
-                                isSolved();
+                            if (x == 7 && z == 2)
+                                solve();
                             else
-                                strike();
+                                strike(7, 2);
                             break;
                         case 3:
-                            if (XCam == 2 && ZCam == 2)
-                                isSolved();
+                            if (x == 2 && z == 2)
+                                solve();
                             else
-                                strike();
+                                strike(2, 2);
                             break;
                     }
                     break;
 
                 // Move forward
                 case 1:
-                    if (direction == 0 && ZCam <= 8 && !horiWalls[XCam, ZCam])
-                        ZCam++;
-                    else if (direction == 1 && XCam <= 8 && !vertWalls[ZCam, XCam])
-                        XCam++;
-                    else if (direction == 2 && ZCam >= 1 && !horiWalls[XCam, ZCam - 1])
-                        ZCam--;
-                    else if (direction == 3 && XCam >= 1 && !vertWalls[ZCam, XCam - 1])
-                        XCam--;
+                    if (dir == 0 && z <= 8 && !horiWalls[x, z])
+                        z++;
+                    else if (dir == 1 && x <= 8 && !vertWalls[z, x])
+                        x++;
+                    else if (dir == 2 && z >= 1 && !horiWalls[x, z - 1])
+                        z--;
+                    else if (dir == 3 && x >= 1 && !vertWalls[z, x - 1])
+                        x--;
                     break;
 
                 // Move backward
                 case 2:
-                    if (direction == 2 && ZCam <= 8 && !horiWalls[XCam, ZCam])
-                        ZCam++;
-                    else if (direction == 3 && XCam <= 8 && !vertWalls[ZCam, XCam])
-                        XCam++;
-                    else if (direction == 0 && ZCam >= 1 && !horiWalls[XCam, ZCam - 1])
-                        ZCam--;
-                    else if (direction == 1 && XCam >= 1 && !vertWalls[ZCam, XCam - 1])
-                        XCam--;
+                    if (dir == 2 && z <= 8 && !horiWalls[x, z])
+                        z++;
+                    else if (dir == 3 && x <= 8 && !vertWalls[z, x])
+                        x++;
+                    else if (dir == 0 && z >= 1 && !horiWalls[x, z - 1])
+                        z--;
+                    else if (dir == 1 && x >= 1 && !vertWalls[z, x - 1])
+                        x--;
                     break;
 
                 // Turn left
                 case 3:
-                    direction = (direction + 3) % 4;
+                    dir = (dir + 3) % 4;
                     break;
 
                 // Turn right
                 case 4:
-                    direction = (direction + 1) % 4;
+                    dir = (dir + 1) % 4;
                     break;
             }
 
-            positionCamera();
+            curCam = new CameraPosition { X = x, Z = z, Direction = dir };
+            _queue.Enqueue(curCam);
         }
     }
 
-    private void positionCamera()
+    private IEnumerator positionCamera(CameraPosition curCamera)
     {
-        TargetCamera.transform.localPosition = new Vector3(.9f - .2f * XCam, 0.05f, .9f - .2f * ZCam);
-        TargetCamera.transform.localEulerAngles = new Vector3(0, 90f * (direction + 2), 180);
+        const int frames = 6;
+
+        while (!_isSolved || _queue.Count > 0)
+        {
+            yield return null;
+
+            if (_queue.Count > 0)
+            {
+                var newCamera = _queue.Dequeue();
+                for (int i = 1; i <= frames; i++)
+                {
+                    TargetCamera.transform.localPosition = Vector3.Lerp(curCamera.Position, newCamera.Position, i / (float) frames);
+                    TargetCamera.transform.localRotation = Quaternion.Slerp(curCamera.Rotation, newCamera.Rotation, i / (float) frames);
+                    yield return null;
+                }
+                curCamera = newCamera;
+            }
+        }
+
+        isActive = false;
     }
 
     void OnActivate()
@@ -389,7 +420,6 @@ public class Maze_3d : MonoBehaviour
 
     void generateMaze1()
     {
-
         horiWalls[1, 0] = true;
         horiWalls[4, 0] = true;
         horiWalls[5, 0] = true;
@@ -471,30 +501,25 @@ public class Maze_3d : MonoBehaviour
         vertWalls[6, 7] = true;
         vertWalls[6, 8] = true;
 
-        objectives[0] = 1;
-        objectives[1] = 2;
-        objectives[2] = 3;
-        objectives[3] = 0;
-        int rand = (int) (Random.value * 4);
-        rand = (rand == 4) ? 3 : rand;
-        objectives[4] = rand;
+        sphereColors[0] = 1;
+        sphereColors[1] = 2;
+        sphereColors[2] = 3;
+        sphereColors[3] = 0;
+        torusColor = Random.Range(0, 4);
 
-        //int[] aimColor = new int[4];
-
-        //Aim color in objectives[5]  this is specific for each maze
-        switch (objectives[4])
+        switch (torusColor)
         {
             case 0:
-                objectives[5] = 1;
+                goalPosition = 0;
                 break;
             case 1:
-                objectives[5] = 2;
+                goalPosition = 1;
                 break;
             case 2:
-                objectives[5] = 0;
+                goalPosition = 3;
                 break;
             case 3:
-                objectives[5] = 3;
+                goalPosition = 2;
                 break;
         }
     }
@@ -583,31 +608,25 @@ public class Maze_3d : MonoBehaviour
         vertWalls[9, 7] = true;
         vertWalls[2, 8] = true;
 
-        objectives[0] = 1;
-        objectives[1] = 2;
-        objectives[2] = 0;
-        objectives[3] = 3;
+        sphereColors[0] = 1;
+        sphereColors[1] = 2;
+        sphereColors[2] = 0;
+        sphereColors[3] = 3;
+        torusColor = Random.Range(0, 4);
 
-        int rand = (int) (Random.value * 4);
-        rand = (rand == 4) ? 3 : rand;
-        objectives[4] = rand;
-
-        //int[] aimColor = new int[4];
-
-        //Aim color in objectives[5]  this is specific for each maze
-        switch (objectives[4])
+        switch (torusColor)
         {
             case 0:
-                objectives[5] = 1;
+                goalPosition = 0;
                 break;
             case 1:
-                objectives[5] = 2;
+                goalPosition = 1;
                 break;
             case 2:
-                objectives[5] = 3;
+                goalPosition = 3;
                 break;
             case 3:
-                objectives[5] = 0;
+                goalPosition = 2;
                 break;
         }
     }
@@ -695,31 +714,25 @@ public class Maze_3d : MonoBehaviour
         vertWalls[7, 8] = true;
         vertWalls[8, 8] = true;
 
-        objectives[0] = 3;
-        objectives[1] = 1;
-        objectives[2] = 0;
-        objectives[3] = 2;
+        sphereColors[0] = 3;
+        sphereColors[1] = 1;
+        sphereColors[2] = 0;
+        sphereColors[3] = 2;
+        torusColor = Random.Range(0, 4);
 
-        int rand = (int) (Random.value * 4);
-        rand = (rand == 4) ? 3 : rand;
-        objectives[4] = rand;
-
-        //int[] aimColor = new int[4];
-
-        //Aim color in objectives[5]  this is specific for each maze
-        switch (objectives[4])
+        switch (torusColor)
         {
             case 0:
-                objectives[5] = 3;
+                goalPosition = 0;
                 break;
             case 1:
-                objectives[5] = 0;
+                goalPosition = 2;
                 break;
             case 2:
-                objectives[5] = 1;
+                goalPosition = 1;
                 break;
             case 3:
-                objectives[5] = 2;
+                goalPosition = 3;
                 break;
         }
     }
@@ -807,31 +820,28 @@ public class Maze_3d : MonoBehaviour
         vertWalls[3, 8] = true;
 
 
-        objectives[0] = 0;
-        objectives[1] = 3;
-        objectives[2] = 1;
-        objectives[3] = 2;
-
-        int rand = (int) (Random.value * 4);
-        rand = (rand == 4) ? 3 : rand;
-        objectives[4] = rand;
+        sphereColors[0] = 0;
+        sphereColors[1] = 3;
+        sphereColors[2] = 1;
+        sphereColors[3] = 2;
+        torusColor = Random.Range(0, 4);
 
         //int[] aimColor = new int[4];
 
         //Aim color in objectives[5]  this is specific for each maze
-        switch (objectives[4])
+        switch (torusColor)
         {
             case 0:
-                objectives[5] = 3;
+                goalPosition = 1;
                 break;
             case 1:
-                objectives[5] = 1;
+                goalPosition = 2;
                 break;
             case 2:
-                objectives[5] = 0;
+                goalPosition = 0;
                 break;
             case 3:
-                objectives[5] = 2;
+                goalPosition = 3;
                 break;
         }
     }
@@ -919,38 +929,34 @@ public class Maze_3d : MonoBehaviour
         vertWalls[8, 8] = true;
 
 
-        objectives[0] = 3;
-        objectives[1] = 0;
-        objectives[2] = 2;
-        objectives[3] = 1;
-
-        int rand = (int) (Random.value * 4);
-        rand = (rand == 4) ? 3 : rand;
-        objectives[4] = rand;
+        sphereColors[0] = 3;
+        sphereColors[1] = 0;
+        sphereColors[2] = 2;
+        sphereColors[3] = 1;
+        torusColor = Random.Range(0, 4);
 
         //int[] aimColor = new int[4];
 
         //Aim color in objectives[5]  this is specific for each maze
-        switch (objectives[4])
+        switch (torusColor)
         {
             case 0:
-                objectives[5] = 2;
+                goalPosition = 2;
                 break;
             case 1:
-                objectives[5] = 0;
+                goalPosition = 1;
                 break;
             case 2:
-                objectives[5] = 1;
+                goalPosition = 3;
                 break;
             case 3:
-                objectives[5] = 3;
+                goalPosition = 0;
                 break;
         }
     }
 
     void generateMaze6()
     {
-
         horiWalls[1, 0] = true;
         horiWalls[3, 0] = true;
         horiWalls[4, 0] = true;
@@ -1030,89 +1036,77 @@ public class Maze_3d : MonoBehaviour
         vertWalls[6, 8] = true;
         vertWalls[7, 8] = true;
 
+        sphereColors[0] = 2;
+        sphereColors[1] = 3;
+        sphereColors[2] = 0;
+        sphereColors[3] = 1;
+        torusColor = Random.Range(0, 4);
 
-        objectives[0] = 2;
-        objectives[1] = 3;
-        objectives[2] = 0;
-        objectives[3] = 1;
-
-        int rand = (int) (Random.value * 4);
-        rand = (rand == 4) ? 3 : rand;
-        objectives[4] = rand;
-
-        //int[] aimColor = new int[4];
-
-        //Aim color in objectives[5]  this is specific for each maze
-        switch (objectives[4])
+        switch (torusColor)
         {
             case 0:
-                objectives[5] = 2;
+                goalPosition = 0;
                 break;
             case 1:
-                objectives[5] = 3;
+                goalPosition = 1;
                 break;
             case 2:
-                objectives[5] = 1;
+                goalPosition = 3;
                 break;
             case 3:
-                objectives[5] = 0;
+                goalPosition = 2;
                 break;
         }
     }
 
-    void generateMaze7()
+    KMSelectable[] ProcessTwitchCommand(string command)
     {
+        var btns = new List<KMSelectable>();
+        var pieces = command.Trim().ToLowerInvariant().Split(new[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries);
 
-        horiWalls[0, 0] = true;
-        horiWalls[0, 1] = true;
-        horiWalls[0, 2] = true;
-        horiWalls[0, 3] = true;
-        horiWalls[0, 4] = true;
-        horiWalls[0, 5] = true;
-        horiWalls[0, 6] = true;
-        horiWalls[0, 7] = true;
-        horiWalls[0, 8] = true;
-
-        vertWalls[0, 0] = true;
-        vertWalls[0, 1] = true;
-        vertWalls[0, 2] = true;
-        vertWalls[0, 3] = true;
-        vertWalls[0, 4] = true;
-        vertWalls[0, 5] = true;
-        vertWalls[0, 6] = true;
-        vertWalls[0, 7] = true;
-        vertWalls[0, 8] = true;
-
-
-
-        objectives[0] = 2;
-        objectives[1] = 3;
-        objectives[2] = 0;
-        objectives[3] = 1;
-
-        int rand = (int) (Random.value * 4);
-        rand = (rand == 4) ? 3 : rand;
-        objectives[4] = rand;
-
-        //int[] aimColor = new int[4];
-
-        //Aim color in objectives[5]  this is specific for each maze
-        switch (objectives[4])
+        for (int i = 0; i < pieces.Length; i++)
         {
-            case 0:
-                objectives[5] = 2;
-                break;
-            case 1:
-                objectives[5] = 3;
-                break;
-            case 2:
-                objectives[5] = 1;
-                break;
-            case 3:
-                objectives[5] = 0;
-                break;
-        }
-    }
+            switch (pieces[i])
+            {
+                case "forward": case "f": btns.Add(buttons[1]); break;
+                case "backward": case "back": case "b": btns.Add(buttons[2]); break;
+                case "left": case "l": btns.Add(buttons[3]); break;
+                case "right": case "r": btns.Add(buttons[4]); break;
+                case "uturn": case "u-turn": case "180": case "u": btns.Add(buttons[4]); btns.Add(buttons[4]); break;
+                case "move":
+                    if (i + 1 >= pieces.Length)
+                        return null;
+                    switch (pieces[i + 1])
+                    {
+                        case "forward": btns.Add(buttons[1]); break;
+                        case "backward": case "back": btns.Add(buttons[2]); break;
+                        default: return null;
+                    }
+                    i++;
+                    break;
 
+                case "turn":
+                    if (i + 1 >= pieces.Length)
+                        return null;
+                    switch (pieces[i + 1])
+                    {
+                        case "left": btns.Add(buttons[3]); break;
+                        case "right": btns.Add(buttons[4]); break;
+                        case "around": btns.Add(buttons[4]); btns.Add(buttons[4]); break;
+                        default: return null;
+                    }
+                    i++;
+                    break;
+
+                case "submit":
+                    btns.Add(buttons[0]);
+                    break;
+
+                default: return null;
+            }
+        }
+
+        return btns.ToArray();
+    }
 }
 
