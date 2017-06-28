@@ -151,8 +151,9 @@ public class FakeBombInfo : MonoBehaviour
 
     void Awake()
     {
-        widgets = new Widget[5];
-        for (int a = 0; a < 5; a++)
+        const int numWidgets = 10;
+        widgets = new Widget[numWidgets];
+        for (int a = 0; a < numWidgets; a++)
         {
             int r = Random.Range(0, 3);
             if (r == 0) widgets[a] = new PortWidget();
@@ -179,7 +180,7 @@ public class FakeBombInfo : MonoBehaviour
         Debug.Log("Serial: " + serial);
     }
 
-    float startupTime = 3f;
+    float startupTime = .5f;
 
     public delegate void LightsOn();
     public LightsOn ActivateLights;
@@ -292,19 +293,14 @@ public class FakeBombInfo : MonoBehaviour
     {
         List<string> responses = new List<string>();
         if (queryKey == KMBombInfo.QUERYKEY_GET_SERIAL_NUMBER)
-        {
-            responses.Add(JsonConvert.SerializeObject((object) new Dictionary<string, string>()
-            {
-                {
-                    "serial", serial
-                }
-            }));
-        }
+            responses.Add(JsonConvert.SerializeObject(new Dictionary<string, string>() { { "serial", serial } }));
         foreach (Widget w in widgets)
         {
             string r = w.GetResult(queryKey, queryInfo);
             if (r != null) responses.Add(r);
         }
+        if (queryKey == "Unity")
+            responses.Add(JsonConvert.SerializeObject(new Dictionary<string, bool>() { { "Unity", true } }));
         return responses;
     }
 
@@ -657,7 +653,7 @@ public class TestHarness : MonoBehaviour
     }
 
     Dictionary<Component, HashSet<KMSelectable>> ComponentHelds = new Dictionary<Component, HashSet<KMSelectable>> { };
-    IEnumerator SimulateModule(Component component, MethodInfo method, string command)
+    IEnumerator SimulateModule(Component component, Transform moduleTransform, MethodInfo method, string command)
     {
         // Simple Command
         if (method.ReturnType == typeof(KMSelectable[]))
@@ -678,14 +674,15 @@ public class TestHarness : MonoBehaviour
                 yield break;
             }
 
-            int initalStrikes = fakeInfo.strikes;
+            int initialStrikes = fakeInfo.strikes;
+            int initialSolved = fakeInfo.GetSolvedModuleNames().Count;
             foreach (KMSelectable selectable in selectableSequence)
             {
                 DoInteractionStart(selectable);
                 yield return new WaitForSeconds(0.1f);
                 DoInteractionEnd(selectable);
 
-                if (fakeInfo.strikes != initalStrikes)
+                if (fakeInfo.strikes != initialStrikes || fakeInfo.GetSolvedModuleNames().Count != initialSolved)
                 {
                     break;
                 }
@@ -707,30 +704,49 @@ public class TestHarness : MonoBehaviour
                 yield break;
             }
 
-            if (!ComponentHelds.ContainsKey(component))
-            {
-                ComponentHelds[component] = new HashSet<KMSelectable>();
-            }
+            if (responseCoroutine == null)
+                yield break;
 
-            HashSet<KMSelectable> HeldSelectables = ComponentHelds[component];
+            if (!ComponentHelds.ContainsKey(component))
+                ComponentHelds[component] = new HashSet<KMSelectable>();
+            HashSet<KMSelectable> heldSelectables = ComponentHelds[component];
+
+            int initialStrikes = fakeInfo.strikes;
+            int initialSolved = fakeInfo.GetSolvedModuleNames().Count;
+
             while (responseCoroutine.MoveNext())
             {
                 object currentObject = responseCoroutine.Current;
                 if (currentObject is KMSelectable)
                 {
                     KMSelectable selectable = (KMSelectable) currentObject;
-                    if (HeldSelectables.Contains(selectable))
+                    if (heldSelectables.Contains(selectable))
                     {
                         DoInteractionEnd(selectable);
-                        HeldSelectables.Remove(selectable);
+                        heldSelectables.Remove(selectable);
+                        if (fakeInfo.strikes != initialStrikes || fakeInfo.GetSolvedModuleNames().Count != initialSolved)
+                            yield break;
                     }
                     else
                     {
                         DoInteractionStart(selectable);
-                        HeldSelectables.Add(selectable);
+                        heldSelectables.Add(selectable);
                     }
                 }
-                yield return currentObject;
+                else if (currentObject is string)
+                {
+                    Debug.Log("Twitch handler sent: " + currentObject);
+                    yield return currentObject;
+                }
+                else if (currentObject is Quaternion)
+                {
+                    moduleTransform.localRotation = (Quaternion) currentObject;
+                }
+                else
+                    yield return currentObject;
+
+                if (fakeInfo.strikes != initialStrikes || fakeInfo.GetSolvedModuleNames().Count != initialSolved)
+                    yield break;
             }
         }
     }
@@ -777,7 +793,7 @@ public class TestHarness : MonoBehaviour
         GUILayout.Space(10);
 
         command = GUILayout.TextField(command);
-        if (GUILayout.Button("Simulate Twitch Command"))
+        if ((GUILayout.Button("Simulate Twitch Command") || Event.current.keyCode == KeyCode.Return) && command != "")
         {
             Debug.Log("Twitch Command: " + command);
 
@@ -791,7 +807,7 @@ public class TestHarness : MonoBehaviour
 
                     if (method != null)
                     {
-                        StartCoroutine(SimulateModule(component, method, command));
+                        StartCoroutine(SimulateModule(component, module.transform, method, command));
                     }
                 }
             }
