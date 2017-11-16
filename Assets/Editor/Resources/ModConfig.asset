@@ -13,5 +13,10 @@ MonoBehaviour:
   m_EditorClassIdentifier:
   id: MouseInTheMaze
   title: Mouse In The Maze
+  description: "Oh no. There\u2019s a mouse in the maze.\n\nModule created and implemented
+    by Konqi, currently maintained by Timwi.\n\n[url=http://ktane.timwi.de/PDF/Mouse%20In%20The%20Maze.pdf]Manual
+    PDF[/url]\n[url=http://ktane.timwi.de/HTML/Mouse%20In%20The%20Maze.html]Manual
+    HTML[/url]"
   version: 1.0
   outputFolder: build
+  previewImage: {fileID: 0}
