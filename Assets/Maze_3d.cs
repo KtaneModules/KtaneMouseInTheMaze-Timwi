@@ -390,7 +390,7 @@ public class Maze_3d : MonoBehaviour
 
     private IEnumerator positionCamera(CameraPosition curCamera)
     {
-        const int frames = 6;
+        const float duration = .1f;
 
         while (!_isSolved || _queue.Count > 0)
         {
@@ -399,11 +399,13 @@ public class Maze_3d : MonoBehaviour
             if (_queue.Count > 0)
             {
                 var newCamera = _queue.Dequeue();
-                for (int i = 1; i <= frames; i++)
+                var elapsed = 0f;
+                while (elapsed < duration)
                 {
-                    TargetCamera.transform.localPosition = Vector3.Lerp(curCamera.Position, newCamera.Position, i / (float) frames);
-                    TargetCamera.transform.localRotation = Quaternion.Slerp(curCamera.Rotation, newCamera.Rotation, i / (float) frames);
                     yield return null;
+                    elapsed += Time.deltaTime;
+                    TargetCamera.transform.localPosition = Vector3.Lerp(curCamera.Position, newCamera.Position, Mathf.Min(1, elapsed / duration));
+                    TargetCamera.transform.localRotation = Quaternion.Slerp(curCamera.Rotation, newCamera.Rotation, Mathf.Min(1, elapsed / duration));
                 }
                 curCamera = newCamera;
             }
