@@ -1061,6 +1061,10 @@ public class Maze_3d : MonoBehaviour
         }
     }
 
+#pragma warning disable 414
+    private string TwitchHelpMessage = @"Move with “!{0} forward back”. Turn with “!{0} left right u-turn”. Submit with “!{0} submit”. The first letter only can be used instead.";
+#pragma warning restore 414
+
     KMSelectable[] ProcessTwitchCommand(string command)
     {
         var btns = new List<KMSelectable>();
@@ -1101,6 +1105,7 @@ public class Maze_3d : MonoBehaviour
                     break;
 
                 case "submit":
+                case "s":
                     btns.Add(buttons[0]);
                     break;
 
