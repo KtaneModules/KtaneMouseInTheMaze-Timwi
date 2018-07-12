@@ -1,6 +1,6 @@
 ﻿
 Microsoft Visual Studio Solution File, Format Version 12.00
-# Visual Studio 2017
+# Visual Studio 15
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MouseInTheMaze", "MouseInTheMaze.csproj", "{B792972A-F0E4-5ADC-E361-AACBADB39A0D}"
 EndProject
 Project("{FAE04EC0-301F-11D3-BF4B-00C04F79EFBC}") = "MouseInTheMaze.Editor", "MouseInTheMaze.Editor.csproj", "{D7C28A31-B16C-504C-C2DB-B04FD1BD9667}"
