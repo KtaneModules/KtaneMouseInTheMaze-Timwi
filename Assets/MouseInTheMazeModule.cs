@@ -1,11 +1,13 @@
 ﻿using System;
 using System.Collections;
 using System.Collections.Generic;
+using System.Linq;
+using System.Text;
 using UnityEngine;
 
 using Random = UnityEngine.Random;
 
-public class Maze_3d : MonoBehaviour
+public class MouseInTheMazeModule : MonoBehaviour
 {
     public KMSelectable[] buttons;
     bool isActive;
@@ -16,6 +18,7 @@ public class Maze_3d : MonoBehaviour
     public Material MatSphere;
     public MeshFilter Floor, OuterWalls, Ceiling, Sphere, XWall, ZWall, Torus;
     public Light Light;
+    public KMRuleSeedable RuleSeedable;
 
     const int mLayer = 30;
 
@@ -26,6 +29,7 @@ public class Maze_3d : MonoBehaviour
     int[] sphereColors = new int[4];    //0:white 1:green 2:blue 3: yellow; clockwise order from top-left
     int torusColor;
     int goalPosition;
+    int[] goalFromTorusColor;
     CameraPosition curCam;
 
     private static int _moduleIdCounter = 1;
@@ -239,7 +243,94 @@ public class Maze_3d : MonoBehaviour
 
         myBlock = new MaterialPropertyBlock();
 
-        generateMaze();
+        // Start of rule-seeded code
+        var rnd = RuleSeedable.GetRNG();
+        Debug.LogFormat(@"[Mouse in the Maze #{0}] Using rule seed: {1}", _moduleId, rnd.Seed);
+        var generatedHWalls = new List<bool[,]>();
+        var generatedVWalls = new List<bool[,]>();
+        var generatedGoalFromTorus = new List<int[]>();
+        var generatedSphereColors = new List<int[]>();
+        if (rnd.Seed != 1)
+        {
+            // Generate 6 random mazes and then remove 10–12 walls from each
+            for (var mazeIx = 0; mazeIx < 6; mazeIx++)
+            {
+                var hWalls = new bool[10, 9];
+                var vWalls = new bool[10, 9];
+                for (var i = 0; i < 10; i++)
+                    for (var j = 0; j < 9; j++)
+                    {
+                        hWalls[i, j] = true;
+                        vWalls[i, j] = true;
+                    }
+
+                var todo = Enumerable.Range(0, 100).ToList();
+                var visited = new List<int>();
+
+                var startingSquare = rnd.Next(0, 100);
+                visited.Add(startingSquare);
+                todo.RemoveAt(startingSquare);
+
+                while (todo.Count > 0)
+                {
+                    // Pick a random square from “visited”
+                    var randomSquareIx = rnd.Next(0, visited.Count);
+                    var sq = visited[randomSquareIx];
+                    var validNeighbors = new List<int>();
+                    if (sq % 10 != 0 && todo.Contains(sq - 1))
+                        validNeighbors.Add(sq - 1);
+                    if (sq % 10 != 9 && todo.Contains(sq + 1))
+                        validNeighbors.Add(sq + 1);
+                    if (sq / 10 != 0 && todo.Contains(sq - 10))
+                        validNeighbors.Add(sq - 10);
+                    if (sq / 10 != 9 && todo.Contains(sq + 10))
+                        validNeighbors.Add(sq + 10);
+
+                    if (validNeighbors.Count == 0)
+                    {
+                        visited.RemoveAt(randomSquareIx);
+                        continue;
+                    }
+
+                    var neighIx = rnd.Next(0, validNeighbors.Count);
+                    var neigh = validNeighbors[neighIx];
+                    if (sq % 10 == neigh % 10)
+                        hWalls[sq % 10, Math.Min(sq / 10, neigh / 10)] = false;
+                    else
+                        vWalls[sq / 10, Math.Min(sq % 10, neigh % 10)] = false;
+                    visited.Add(neigh);
+                    todo.Remove(neigh);
+                }
+
+                // Remove between 2–4 random walls to create some loops
+                var numWallsToRemove = rnd.Next(2, 5);
+                while (numWallsToRemove > 0)
+                {
+                    var hv = rnd.Next(0, 2) != 0;
+                    var i = rnd.Next(0, 10);
+                    var j = rnd.Next(0, 9);
+                    if (hv ? hWalls[i, j] : vWalls[i, j])
+                    {
+                        if (hv)
+                            hWalls[i, j] = false;
+                        else
+                            vWalls[i, j] = false;
+                        numWallsToRemove--;
+                    }
+                }
+
+                generatedHWalls.Add(hWalls);
+                generatedVWalls.Add(vWalls);
+                generatedGoalFromTorus.Add(rnd.ShuffleFisherYates(Enumerable.Range(0, 4).ToArray()));
+                generatedSphereColors.Add(rnd.ShuffleFisherYates(Enumerable.Range(0, 4).ToArray()));
+
+                // This is redundant for the C# side, but the manual side does this to randomize the order of the torus colors
+                rnd.ShuffleFisherYates(Enumerable.Range(0, 4).ToArray());
+            }
+        }
+        // End of rule-seed code
+
+        generateMaze(generatedHWalls, generatedVWalls, generatedGoalFromTorus, generatedSphereColors);
 
         var x = Random.Range(0, 10);
         var z = Random.Range(0, 10);
@@ -259,32 +350,34 @@ public class Maze_3d : MonoBehaviour
         StartCoroutine(positionCamera(curCam));
     }
 
-    void generateMaze()
+    void generateMaze(List<bool[,]> hWalls, List<bool[,]> vWalls, List<int[]> goalFromTorus, List<int[]> sphColors)
     {
         int mazeRand = Random.Range(0, 6);
-        Debug.LogFormat("[Mouse in the Maze #{1}] You are in the {0} maze.", "top left|middle left|bottom left|top right|middle right|bottom right".Split('|')[mazeRand], _moduleId);
+        Debug.LogFormat("[Mouse in the Maze #{1}] You are in the {0} maze.", "top left|top right|middle left|middle right|bottom left|bottom right".Split('|')[mazeRand], _moduleId);
 
-        switch (mazeRand)
+        if (hWalls.Count > 0)   // rule seeded mazes
         {
-            case 0:
-                generateMaze1();
-                break;
-            case 1:
-                generateMaze2();
-                break;
-            case 2:
-                generateMaze3();
-                break;
-            case 3:
-                generateMaze4();
-                break;
-            case 4:
-                generateMaze5();
-                break;
-            default:
-                generateMaze6();
-                break;
+            horiWalls = hWalls[mazeRand];
+            vertWalls = vWalls[mazeRand];
+            goalFromTorusColor = goalFromTorus[mazeRand];
+            sphereColors = sphColors[mazeRand];
         }
+        else
+        {
+            // Default rule seed (original mazes)
+            switch (mazeRand)
+            {
+                case 0: generateMaze1(); break;
+                case 1: generateMaze2(); break;
+                case 2: generateMaze3(); break;
+                case 3: generateMaze4(); break;
+                case 4: generateMaze5(); break;
+                default: generateMaze6(); break;
+            }
+        }
+
+        torusColor = Random.Range(0, 4);
+        goalPosition = goalFromTorusColor[torusColor];
 
         Debug.LogFormat("[Mouse in the Maze #{1}] Torus color: {0}", "white|green|blue|yellow".Split('|')[torusColor], _moduleId);
         Debug.LogFormat("[Mouse in the Maze #{1}] Goal sphere color: {0}", "white|green|blue|yellow".Split('|')[sphereColors[goalPosition]], _moduleId);
@@ -503,32 +596,12 @@ public class Maze_3d : MonoBehaviour
         vertWalls[6, 7] = true;
         vertWalls[6, 8] = true;
 
-        sphereColors[0] = 1;
-        sphereColors[1] = 2;
-        sphereColors[2] = 3;
-        sphereColors[3] = 0;
-        torusColor = Random.Range(0, 4);
-
-        switch (torusColor)
-        {
-            case 0:
-                goalPosition = 0;
-                break;
-            case 1:
-                goalPosition = 1;
-                break;
-            case 2:
-                goalPosition = 3;
-                break;
-            case 3:
-                goalPosition = 2;
-                break;
-        }
+        sphereColors = new int[] { 1, 2, 3, 0 };
+        goalFromTorusColor = new int[] { 0, 1, 3, 2 };
     }
 
-    void generateMaze2()
+    void generateMaze3()
     {
-
         horiWalls[1, 0] = true;
         horiWalls[8, 0] = true;
         horiWalls[4, 1] = true;
@@ -610,30 +683,11 @@ public class Maze_3d : MonoBehaviour
         vertWalls[9, 7] = true;
         vertWalls[2, 8] = true;
 
-        sphereColors[0] = 1;
-        sphereColors[1] = 2;
-        sphereColors[2] = 0;
-        sphereColors[3] = 3;
-        torusColor = Random.Range(0, 4);
-
-        switch (torusColor)
-        {
-            case 0:
-                goalPosition = 0;
-                break;
-            case 1:
-                goalPosition = 1;
-                break;
-            case 2:
-                goalPosition = 3;
-                break;
-            case 3:
-                goalPosition = 2;
-                break;
-        }
+        sphereColors = new int[] { 1, 2, 0, 3 };
+        goalFromTorusColor = new int[] { 0, 1, 3, 2 };
     }
 
-    void generateMaze3()
+    void generateMaze5()
     {
         horiWalls[1, 0] = true;
         horiWalls[2, 0] = true;
@@ -716,32 +770,12 @@ public class Maze_3d : MonoBehaviour
         vertWalls[7, 8] = true;
         vertWalls[8, 8] = true;
 
-        sphereColors[0] = 3;
-        sphereColors[1] = 1;
-        sphereColors[2] = 0;
-        sphereColors[3] = 2;
-        torusColor = Random.Range(0, 4);
-
-        switch (torusColor)
-        {
-            case 0:
-                goalPosition = 0;
-                break;
-            case 1:
-                goalPosition = 2;
-                break;
-            case 2:
-                goalPosition = 1;
-                break;
-            case 3:
-                goalPosition = 3;
-                break;
-        }
+        sphereColors = new int[] { 3, 1, 0, 2 };
+        goalFromTorusColor = new int[] { 0, 2, 1, 3 };
     }
 
-    void generateMaze4()
+    void generateMaze2()
     {
-
         horiWalls[1, 0] = true;
         horiWalls[2, 0] = true;
         horiWalls[3, 0] = true;
@@ -821,36 +855,12 @@ public class Maze_3d : MonoBehaviour
         vertWalls[2, 8] = true;
         vertWalls[3, 8] = true;
 
-
-        sphereColors[0] = 0;
-        sphereColors[1] = 3;
-        sphereColors[2] = 1;
-        sphereColors[3] = 2;
-        torusColor = Random.Range(0, 4);
-
-        //int[] aimColor = new int[4];
-
-        //Aim color in objectives[5]  this is specific for each maze
-        switch (torusColor)
-        {
-            case 0:
-                goalPosition = 1;
-                break;
-            case 1:
-                goalPosition = 2;
-                break;
-            case 2:
-                goalPosition = 0;
-                break;
-            case 3:
-                goalPosition = 3;
-                break;
-        }
+        sphereColors = new int[] { 0, 3, 1, 2 };
+        goalFromTorusColor = new int[] { 1, 2, 0, 3 };
     }
 
-    void generateMaze5()
+    void generateMaze4()
     {
-
         horiWalls[8, 0] = true;
         horiWalls[9, 0] = true;
         horiWalls[1, 1] = true;
@@ -930,31 +940,8 @@ public class Maze_3d : MonoBehaviour
         vertWalls[6, 8] = true;
         vertWalls[8, 8] = true;
 
-
-        sphereColors[0] = 3;
-        sphereColors[1] = 0;
-        sphereColors[2] = 2;
-        sphereColors[3] = 1;
-        torusColor = Random.Range(0, 4);
-
-        //int[] aimColor = new int[4];
-
-        //Aim color in objectives[5]  this is specific for each maze
-        switch (torusColor)
-        {
-            case 0:
-                goalPosition = 2;
-                break;
-            case 1:
-                goalPosition = 1;
-                break;
-            case 2:
-                goalPosition = 3;
-                break;
-            case 3:
-                goalPosition = 0;
-                break;
-        }
+        sphereColors = new int[] { 3, 0, 2, 1 };
+        goalFromTorusColor = new int[] { 2, 1, 3, 0 };
     }
 
     void generateMaze6()
@@ -1038,27 +1025,8 @@ public class Maze_3d : MonoBehaviour
         vertWalls[6, 8] = true;
         vertWalls[7, 8] = true;
 
-        sphereColors[0] = 2;
-        sphereColors[1] = 3;
-        sphereColors[2] = 0;
-        sphereColors[3] = 1;
-        torusColor = Random.Range(0, 4);
-
-        switch (torusColor)
-        {
-            case 0:
-                goalPosition = 0;
-                break;
-            case 1:
-                goalPosition = 1;
-                break;
-            case 2:
-                goalPosition = 3;
-                break;
-            case 3:
-                goalPosition = 2;
-                break;
-        }
+        sphereColors = new int[] { 2, 3, 0, 1 };
+        goalFromTorusColor = new int[] { 0, 1, 3, 2 };
     }
 
 #pragma warning disable 414
