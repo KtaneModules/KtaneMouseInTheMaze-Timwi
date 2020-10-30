@@ -2,7 +2,6 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
-using System.Text;
 using UnityEngine;
 
 using Random = UnityEngine.Random;
@@ -10,8 +9,6 @@ using Random = UnityEngine.Random;
 public class MouseInTheMazeModule : MonoBehaviour
 {
     public KMSelectable[] buttons;
-    bool isActive;
-
     public Camera TargetCamera;
     public Material Mat;
     public Material MatWall;
@@ -20,36 +17,76 @@ public class MouseInTheMazeModule : MonoBehaviour
     public Light Light;
     public KMRuleSeedable RuleSeedable;
 
-    const int mLayer = 30;
+    private const int mLayer = 30;
 
-    MaterialPropertyBlock myBlock;
+    MaterialPropertyBlock _myBlock;
+    bool[,] _vertWalls = new bool[10, 9];
+    bool[,] _horiWalls = new bool[10, 9];
+    int[] _sphereColors = new int[4];    //0=white, 1=green, 2=blue, 3=yellow; clockwise order from top-left
+    int _torusColor;
+    int _goalPosition;
+    int[] _goalFromTorusColor;
+    CameraPosition _curCam;
 
-    bool[,] vertWalls = new bool[10, 9];
-    bool[,] horiWalls = new bool[10, 9];
-    int[] sphereColors = new int[4];    //0:white 1:green 2:blue 3: yellow; clockwise order from top-left
-    int torusColor;
-    int goalPosition;
-    int[] goalFromTorusColor;
-    CameraPosition curCam;
-
+    private bool _isActive;
     private static int _moduleIdCounter = 1;
     private int _moduleId;
     private bool _isSolved = false;
 
-    sealed class CameraPosition
+    sealed class CameraPosition : IEquatable<CameraPosition>
     {
-        public int X;
-        public int Z;
-        public int Direction;
+        public int X { get; private set; }
+        public int Z { get; private set; }
+        public int Direction { get; private set; }
         public Vector3 Position { get { return new Vector3(.9f - .2f * X, 0.05f, .9f - .2f * Z); } }
         public Quaternion Rotation { get { return Quaternion.Euler(0, 90f * (Direction + 2), 180); } }
+        public CameraPosition(int x, int z, int dir) { X = x; Z = z; Direction = dir; }
+
+        public CameraPosition MoveForward(bool[,] horiWalls, bool[,] vertWalls)
+        {
+            return
+                (Direction == 0 && Z <= 8 && !horiWalls[X, Z]) ? new CameraPosition(X, Z + 1, Direction) :
+                (Direction == 1 && X <= 8 && !vertWalls[Z, X]) ? new CameraPosition(X + 1, Z, Direction) :
+                (Direction == 2 && Z >= 1 && !horiWalls[X, Z - 1]) ? new CameraPosition(X, Z - 1, Direction) :
+                (Direction == 3 && X >= 1 && !vertWalls[Z, X - 1]) ? new CameraPosition(X - 1, Z, Direction) : null;
+        }
+
+        public CameraPosition MoveBackward(bool[,] horiWalls, bool[,] vertWalls)
+        {
+            return
+                (Direction == 2 && Z <= 8 && !horiWalls[X, Z]) ? new CameraPosition(X, Z + 1, Direction) :
+                (Direction == 3 && X <= 8 && !vertWalls[Z, X]) ? new CameraPosition(X + 1, Z, Direction) :
+                (Direction == 0 && Z >= 1 && !horiWalls[X, Z - 1]) ? new CameraPosition(X, Z - 1, Direction) :
+                (Direction == 1 && X >= 1 && !vertWalls[Z, X - 1]) ? new CameraPosition(X - 1, Z, Direction) : null;
+        }
+
+        public CameraPosition TurnLeft() { return new CameraPosition(X, Z, (Direction + 3) % 4); }
+        public CameraPosition TurnRight() { return new CameraPosition(X, Z, (Direction + 1) % 4); }
+
+        public bool Equals(CameraPosition other)
+        {
+            return other != null && other.X == X && other.Z == Z && other.Direction == Direction;
+        }
+        public override int GetHashCode()
+        {
+            return X + 31 * Z + 71 * Direction;
+        }
+        public override bool Equals(object obj)
+        {
+            return obj is CameraPosition && Equals((CameraPosition) obj);
+        }
+
+        public bool IsGoal(int goalPosition)
+        {
+            return new[] { 2, 7, 7, 2 }[goalPosition] == X && new[] { 7, 7, 2, 2 }[goalPosition] == Z; ;
+        }
     }
 
-    private Queue<CameraPosition> _queue = new Queue<CameraPosition>();
+    private readonly Queue<CameraPosition> _queue = new Queue<CameraPosition>();
 
     void Update()
     {
-        if (!isActive)
+        if (!_isActive)
             return;
 
         // Floor and Ceiling
@@ -90,7 +127,7 @@ public class MouseInTheMazeModule : MonoBehaviour
         {
             for (int j = 0; j <= 8; j++)
             {
-                if (horiWalls[i, j] == true)
+                if (_horiWalls[i, j] == true)
                 {
                     XWall.transform.localEulerAngles = new Vector3(270, 0, 0);
                     XWall.transform.localPosition = new Vector3(.9f - .2f * i, 0f, .8f - .2f * j);
@@ -116,7 +153,7 @@ public class MouseInTheMazeModule : MonoBehaviour
                         false,
                         false);
                 }
-                if (vertWalls[i, j] == true)
+                if (_vertWalls[i, j] == true)
                 {
                     ZWall.transform.localEulerAngles = new Vector3(270, 90, 0);
                     ZWall.transform.localPosition = new Vector3(.8f - .2f * j, 0f, .9f - .2f * i);
@@ -150,19 +187,19 @@ public class MouseInTheMazeModule : MonoBehaviour
         float z = 0;
         for (int i = 0; i <= 3; i++)
         {
-            switch (sphereColors[i])
+            switch (_sphereColors[i])
             {
                 case 0:
-                    myBlock.SetColor("_Color", Color.white);
+                    _myBlock.SetColor("_Color", Color.white);
                     break;
                 case 1:
-                    myBlock.SetColor("_Color", Color.green);
+                    _myBlock.SetColor("_Color", Color.green);
                     break;
                 case 2:
-                    myBlock.SetColor("_Color", Color.blue);
+                    _myBlock.SetColor("_Color", Color.blue);
                     break;
                 case 3:
-                    myBlock.SetColor("_Color", new Color(1, .7f, 0));
+                    _myBlock.SetColor("_Color", new Color(1, .7f, 0));
                     break;
             }
 
@@ -194,25 +231,25 @@ public class MouseInTheMazeModule : MonoBehaviour
                 mLayer,
                 TargetCamera,
                 0,
-                myBlock,
+                _myBlock,
                 false,
                 false);
         }
 
         //Torus
-        switch (torusColor)
+        switch (_torusColor)
         {
             case 0:
-                myBlock.SetColor("_Color", Color.white);
+                _myBlock.SetColor("_Color", Color.white);
                 break;
             case 1:
-                myBlock.SetColor("_Color", Color.green);
+                _myBlock.SetColor("_Color", Color.green);
                 break;
             case 2:
-                myBlock.SetColor("_Color", Color.blue);
+                _myBlock.SetColor("_Color", Color.blue);
                 break;
             case 3:
-                myBlock.SetColor("_Color", new Color(1, .5f, 0));
+                _myBlock.SetColor("_Color", new Color(1, .5f, 0));
                 break;
         }
         Torus.gameObject.transform.Rotate(new Vector3(15f, 45f, 30f) * 2 * Time.deltaTime);
@@ -223,7 +260,7 @@ public class MouseInTheMazeModule : MonoBehaviour
             mLayer,
             TargetCamera,
             0,
-            myBlock,
+            _myBlock,
             false,
             false);
     }
@@ -231,7 +268,7 @@ public class MouseInTheMazeModule : MonoBehaviour
     void Start()
     {
         _moduleId = _moduleIdCounter++;
-        isActive = false;
+        _isActive = false;
 
         GetComponent<KMBombModule>().OnActivate += OnActivate;
 
@@ -241,7 +278,7 @@ public class MouseInTheMazeModule : MonoBehaviour
             buttons[i].OnInteract += delegate () { OnPress(j); return false; };
         }
 
-        myBlock = new MaterialPropertyBlock();
+        _myBlock = new MaterialPropertyBlock();
 
         // Start of rule-seeded code
         var rnd = RuleSeedable.GetRNG();
@@ -338,16 +375,16 @@ public class MouseInTheMazeModule : MonoBehaviour
         // Start in a random direction, but not directly facing a wall.
         var direction = Random.Range(0, 4);
         while (
-            direction == 0 ? (z == 9 || horiWalls[x, z]) :
-            direction == 1 ? (x == 9 || vertWalls[z, x]) :
-            direction == 2 ? (z == 0 || horiWalls[x, z - 1]) :
-            direction == 3 ? (x == 0 || vertWalls[z, x - 1]) : false)
+            direction == 0 ? (z == 9 || _horiWalls[x, z]) :
+            direction == 1 ? (x == 9 || _vertWalls[z, x]) :
+            direction == 2 ? (z == 0 || _horiWalls[x, z - 1]) :
+            direction == 3 ? (x == 0 || _vertWalls[z, x - 1]) : false)
             direction = (direction + 1) % 4;
 
-        curCam = new CameraPosition { X = x, Z = z, Direction = direction };
-        TargetCamera.transform.localPosition = curCam.Position;
-        TargetCamera.transform.localRotation = curCam.Rotation;
-        StartCoroutine(positionCamera(curCam));
+        _curCam = new CameraPosition(x, z, direction);
+        TargetCamera.transform.localPosition = _curCam.Position;
+        TargetCamera.transform.localRotation = _curCam.Rotation;
+        StartCoroutine(positionCamera(_curCam));
     }
 
     void generateMaze(List<bool[,]> hWalls, List<bool[,]> vWalls, List<int[]> goalFromTorus, List<int[]> sphColors)
@@ -357,10 +394,10 @@ public class MouseInTheMazeModule : MonoBehaviour
 
         if (hWalls.Count > 0)   // rule seeded mazes
         {
-            horiWalls = hWalls[mazeRand];
-            vertWalls = vWalls[mazeRand];
-            goalFromTorusColor = goalFromTorus[mazeRand];
-            sphereColors = sphColors[mazeRand];
+            _horiWalls = hWalls[mazeRand];
+            _vertWalls = vWalls[mazeRand];
+            _goalFromTorusColor = goalFromTorus[mazeRand];
+            _sphereColors = sphColors[mazeRand];
         }
         else
         {
@@ -376,11 +413,11 @@ public class MouseInTheMazeModule : MonoBehaviour
             }
         }
 
-        torusColor = Random.Range(0, 4);
-        goalPosition = goalFromTorusColor[torusColor];
+        _torusColor = Random.Range(0, 4);
+        _goalPosition = _goalFromTorusColor[_torusColor];
 
-        Debug.LogFormat("[Mouse in the Maze #{1}] Torus color: {0}", "white|green|blue|yellow".Split('|')[torusColor], _moduleId);
-        Debug.LogFormat("[Mouse in the Maze #{1}] Goal sphere color: {0}", "white|green|blue|yellow".Split('|')[sphereColors[goalPosition]], _moduleId);
+        Debug.LogFormat("[Mouse in the Maze #{1}] Torus color: {0}", "white|green|blue|yellow".Split('|')[_torusColor], _moduleId);
+        Debug.LogFormat("[Mouse in the Maze #{1}] Goal sphere color: {0}", "white|green|blue|yellow".Split('|')[_sphereColors[_goalPosition]], _moduleId);
     }
 
     void solve()
@@ -389,9 +426,9 @@ public class MouseInTheMazeModule : MonoBehaviour
         _isSolved = true;
     }
 
-    void strike(int x, int z)
+    void strike()
     {
-        Debug.LogFormat("[Mouse in the Maze #{0}] Strike because you pressed Submit on {1},{2} but the solution is {3},{4}.", _moduleId, curCam.X, curCam.Z, x, z);
+        Debug.LogFormat("[Mouse in the Maze #{0}] Strike because you pressed Submit on {1},{2} but the solution is {3},{4}.", _moduleId, _curCam.X, _curCam.Z, new[] { 2, 7, 7, 2 }[_goalPosition], new[] { 7, 7, 2, 2 }[_goalPosition]);
         GetComponent<KMBombModule>().HandleStrike();
     }
 
@@ -399,85 +436,31 @@ public class MouseInTheMazeModule : MonoBehaviour
     {
         GetComponent<KMAudio>().PlayGameSoundAtTransform(KMSoundOverride.SoundEffect.ButtonPress, buttons[button].transform);
 
-        if (isActive && !_isSolved)
+        if (_isActive && !_isSolved)
         {
-            var x = curCam.X;
-            var z = curCam.Z;
-            var dir = curCam.Direction;
+            CameraPosition newCam = null;
 
             buttons[button].AddInteractionPunch(.5f);
             switch (button)
             {
                 case 0:
-                    //TargetCamera.transform.localPosition = new Vector3(.07f, 2.2f, .07f);
-                    //TargetCamera.transform.Rotate(new Vector3(-90, 0, 0));
-                    //return;
-                    switch (goalPosition)
-                    {
-                        case 0:
-                            if (x == 2 && z == 7)
-                                solve();
-                            else
-                                strike(2, 7);
-                            break;
-                        case 1:
-                            if (x == 7 && z == 7)
-                                solve();
-                            else
-                                strike(7, 7);
-                            break;
-                        case 2:
-                            if (x == 7 && z == 2)
-                                solve();
-                            else
-                                strike(7, 2);
-                            break;
-                        case 3:
-                            if (x == 2 && z == 2)
-                                solve();
-                            else
-                                strike(2, 2);
-                            break;
-                    }
+                    if (_curCam.IsGoal(_goalPosition))
+                        solve();
+                    else
+                        strike();
                     break;
 
-                // Move forward
-                case 1:
-                    if (dir == 0 && z <= 8 && !horiWalls[x, z])
-                        z++;
-                    else if (dir == 1 && x <= 8 && !vertWalls[z, x])
-                        x++;
-                    else if (dir == 2 && z >= 1 && !horiWalls[x, z - 1])
-                        z--;
-                    else if (dir == 3 && x >= 1 && !vertWalls[z, x - 1])
-                        x--;
-                    break;
-
-                // Move backward
-                case 2:
-                    if (dir == 2 && z <= 8 && !horiWalls[x, z])
-                        z++;
-                    else if (dir == 3 && x <= 8 && !vertWalls[z, x])
-                        x++;
-                    else if (dir == 0 && z >= 1 && !horiWalls[x, z - 1])
-                        z--;
-                    else if (dir == 1 && x >= 1 && !vertWalls[z, x - 1])
-                        x--;
-                    break;
-
-                // Turn left
-                case 3:
-                    dir = (dir + 3) % 4;
-                    break;
-
-                // Turn right
-                case 4:
-                    dir = (dir + 1) % 4;
-                    break;
+                case 1: newCam = _curCam.MoveForward(_horiWalls, _vertWalls); break;
+                case 2: newCam = _curCam.MoveBackward(_horiWalls, _vertWalls); break;
+                case 3: newCam = _curCam.TurnLeft(); break;
+                case 4: newCam = _curCam.TurnRight(); break;
             }
 
-            curCam = new CameraPosition { X = x, Z = z, Direction = dir };
-            _queue.Enqueue(curCam);
+            if (newCam != null)
+            {
+                _queue.Enqueue(newCam);
+                _curCam = newCam;
+            }
         }
     }
 
@@ -504,529 +487,529 @@ public class MouseInTheMazeModule : MonoBehaviour
             }
         }
 
-        isActive = false;
+        _isActive = false;
     }
 
     void OnActivate()
     {
-        isActive = true;
+        _isActive = true;
         TargetCamera.enabled = true;
     }
 
     void generateMaze1()
     {
-        horiWalls[1, 0] = true;
-        horiWalls[4, 0] = true;
-        horiWalls[5, 0] = true;
-        horiWalls[7, 0] = true;
-        horiWalls[8, 0] = true;
-        horiWalls[9, 0] = true;
-        horiWalls[3, 1] = true;
-        horiWalls[4, 1] = true;
-        horiWalls[6, 1] = true;
-        horiWalls[7, 1] = true;
-        horiWalls[8, 1] = true;
-        horiWalls[3, 2] = true;
-        horiWalls[4, 2] = true;
-        horiWalls[5, 2] = true;
-        horiWalls[8, 2] = true;
-        horiWalls[9, 2] = true;
-        horiWalls[1, 3] = true;
-        horiWalls[2, 3] = true;
-        horiWalls[5, 3] = true;
-        horiWalls[6, 3] = true;
-        horiWalls[8, 3] = true;
-        horiWalls[7, 3] = true;
-        horiWalls[0, 4] = true;
-        horiWalls[1, 4] = true;
-        horiWalls[8, 4] = true;
-        horiWalls[9, 4] = true;
-        horiWalls[3, 5] = true;
-        horiWalls[4, 5] = true;
-        horiWalls[3, 6] = true;
-        horiWalls[4, 6] = true;
-        horiWalls[5, 6] = true;
-        horiWalls[6, 6] = true;
-        horiWalls[8, 6] = true;
-        horiWalls[8, 7] = true;
-        horiWalls[2, 7] = true;
-        horiWalls[4, 7] = true;
-        horiWalls[5, 7] = true;
-        horiWalls[9, 7] = true;
-        horiWalls[0, 8] = true;
-        horiWalls[1, 8] = true;
-        horiWalls[3, 8] = true;
-        horiWalls[5, 8] = true;
-        horiWalls[7, 8] = true;
-        horiWalls[8, 8] = true;
+        _horiWalls[1, 0] = true;
+        _horiWalls[4, 0] = true;
+        _horiWalls[5, 0] = true;
+        _horiWalls[7, 0] = true;
+        _horiWalls[8, 0] = true;
+        _horiWalls[9, 0] = true;
+        _horiWalls[3, 1] = true;
+        _horiWalls[4, 1] = true;
+        _horiWalls[6, 1] = true;
+        _horiWalls[7, 1] = true;
+        _horiWalls[8, 1] = true;
+        _horiWalls[3, 2] = true;
+        _horiWalls[4, 2] = true;
+        _horiWalls[5, 2] = true;
+        _horiWalls[8, 2] = true;
+        _horiWalls[9, 2] = true;
+        _horiWalls[1, 3] = true;
+        _horiWalls[2, 3] = true;
+        _horiWalls[5, 3] = true;
+        _horiWalls[6, 3] = true;
+        _horiWalls[8, 3] = true;
+        _horiWalls[7, 3] = true;
+        _horiWalls[0, 4] = true;
+        _horiWalls[1, 4] = true;
+        _horiWalls[8, 4] = true;
+        _horiWalls[9, 4] = true;
+        _horiWalls[3, 5] = true;
+        _horiWalls[4, 5] = true;
+        _horiWalls[3, 6] = true;
+        _horiWalls[4, 6] = true;
+        _horiWalls[5, 6] = true;
+        _horiWalls[6, 6] = true;
+        _horiWalls[8, 6] = true;
+        _horiWalls[8, 7] = true;
+        _horiWalls[2, 7] = true;
+        _horiWalls[4, 7] = true;
+        _horiWalls[5, 7] = true;
+        _horiWalls[9, 7] = true;
+        _horiWalls[0, 8] = true;
+        _horiWalls[1, 8] = true;
+        _horiWalls[3, 8] = true;
+        _horiWalls[5, 8] = true;
+        _horiWalls[7, 8] = true;
+        _horiWalls[8, 8] = true;
 
-        vertWalls[1, 0] = true;
-        vertWalls[2, 0] = true;
-        vertWalls[3, 0] = true;
-        vertWalls[6, 0] = true;
-        vertWalls[7, 0] = true;
-        vertWalls[8, 0] = true;
-        vertWalls[1, 1] = true;
-        vertWalls[2, 1] = true;
-        vertWalls[5, 1] = true;
-        vertWalls[6, 1] = true;
-        vertWalls[8, 1] = true;
-        vertWalls[0, 2] = true;
-        vertWalls[1, 2] = true;
-        vertWalls[4, 2] = true;
-        vertWalls[5, 2] = true;
-        vertWalls[7, 2] = true;
-        vertWalls[1, 3] = true;
-        vertWalls[3, 3] = true;
-        vertWalls[4, 3] = true;
-        vertWalls[8, 3] = true;
-        vertWalls[5, 4] = true;
-        vertWalls[9, 4] = true;
-        vertWalls[1, 5] = true;
-        vertWalls[2, 5] = true;
-        vertWalls[5, 5] = true;
-        vertWalls[6, 5] = true;
-        vertWalls[8, 5] = true;
-        vertWalls[3, 6] = true;
-        vertWalls[4, 6] = true;
-        vertWalls[5, 6] = true;
-        vertWalls[7, 6] = true;
-        vertWalls[8, 6] = true;
-        vertWalls[5, 7] = true;
-        vertWalls[6, 7] = true;
-        vertWalls[6, 8] = true;
+        _vertWalls[1, 0] = true;
+        _vertWalls[2, 0] = true;
+        _vertWalls[3, 0] = true;
+        _vertWalls[6, 0] = true;
+        _vertWalls[7, 0] = true;
+        _vertWalls[8, 0] = true;
+        _vertWalls[1, 1] = true;
+        _vertWalls[2, 1] = true;
+        _vertWalls[5, 1] = true;
+        _vertWalls[6, 1] = true;
+        _vertWalls[8, 1] = true;
+        _vertWalls[0, 2] = true;
+        _vertWalls[1, 2] = true;
+        _vertWalls[4, 2] = true;
+        _vertWalls[5, 2] = true;
+        _vertWalls[7, 2] = true;
+        _vertWalls[1, 3] = true;
+        _vertWalls[3, 3] = true;
+        _vertWalls[4, 3] = true;
+        _vertWalls[8, 3] = true;
+        _vertWalls[5, 4] = true;
+        _vertWalls[9, 4] = true;
+        _vertWalls[1, 5] = true;
+        _vertWalls[2, 5] = true;
+        _vertWalls[5, 5] = true;
+        _vertWalls[6, 5] = true;
+        _vertWalls[8, 5] = true;
+        _vertWalls[3, 6] = true;
+        _vertWalls[4, 6] = true;
+        _vertWalls[5, 6] = true;
+        _vertWalls[7, 6] = true;
+        _vertWalls[8, 6] = true;
+        _vertWalls[5, 7] = true;
+        _vertWalls[6, 7] = true;
+        _vertWalls[6, 8] = true;
 
-        sphereColors = new int[] { 1, 2, 3, 0 };
-        goalFromTorusColor = new int[] { 0, 1, 3, 2 };
+        _sphereColors = new int[] { 1, 2, 3, 0 };
+        _goalFromTorusColor = new int[] { 0, 1, 3, 2 };
     }
 
     void generateMaze3()
     {
-        horiWalls[1, 0] = true;
-        horiWalls[8, 0] = true;
-        horiWalls[4, 1] = true;
-        horiWalls[5, 1] = true;
-        horiWalls[6, 1] = true;
-        horiWalls[7, 1] = true;
-        horiWalls[1, 2] = true;
-        horiWalls[2, 2] = true;
-        horiWalls[5, 2] = true;
-        horiWalls[8, 2] = true;
-        horiWalls[0, 3] = true;
-        horiWalls[1, 3] = true;
-        horiWalls[2, 3] = true;
-        horiWalls[9, 3] = true;
-        horiWalls[1, 4] = true;
-        horiWalls[2, 4] = true;
-        horiWalls[3, 4] = true;
-        horiWalls[5, 4] = true;
-        horiWalls[6, 4] = true;
-        horiWalls[8, 4] = true;
-        horiWalls[9, 4] = true;
-        horiWalls[2, 5] = true;
-        horiWalls[3, 5] = true;
-        horiWalls[5, 5] = true;
-        horiWalls[6, 5] = true;
-        horiWalls[7, 5] = true;
-        horiWalls[8, 5] = true;
-        horiWalls[1, 6] = true;
-        horiWalls[2, 6] = true;
-        horiWalls[4, 6] = true;
-        horiWalls[6, 6] = true;
-        horiWalls[9, 6] = true;
-        horiWalls[0, 7] = true;
-        horiWalls[1, 7] = true;
-        horiWalls[2, 7] = true;
-        horiWalls[7, 7] = true;
-        horiWalls[8, 7] = true;
-        horiWalls[1, 8] = true;
-        horiWalls[2, 8] = true;
-        horiWalls[6, 8] = true;
-        horiWalls[9, 8] = true;
+        _horiWalls[1, 0] = true;
+        _horiWalls[8, 0] = true;
+        _horiWalls[4, 1] = true;
+        _horiWalls[5, 1] = true;
+        _horiWalls[6, 1] = true;
+        _horiWalls[7, 1] = true;
+        _horiWalls[1, 2] = true;
+        _horiWalls[2, 2] = true;
+        _horiWalls[5, 2] = true;
+        _horiWalls[8, 2] = true;
+        _horiWalls[0, 3] = true;
+        _horiWalls[1, 3] = true;
+        _horiWalls[2, 3] = true;
+        _horiWalls[9, 3] = true;
+        _horiWalls[1, 4] = true;
+        _horiWalls[2, 4] = true;
+        _horiWalls[3, 4] = true;
+        _horiWalls[5, 4] = true;
+        _horiWalls[6, 4] = true;
+        _horiWalls[8, 4] = true;
+        _horiWalls[9, 4] = true;
+        _horiWalls[2, 5] = true;
+        _horiWalls[3, 5] = true;
+        _horiWalls[5, 5] = true;
+        _horiWalls[6, 5] = true;
+        _horiWalls[7, 5] = true;
+        _horiWalls[8, 5] = true;
+        _horiWalls[1, 6] = true;
+        _horiWalls[2, 6] = true;
+        _horiWalls[4, 6] = true;
+        _horiWalls[6, 6] = true;
+        _horiWalls[9, 6] = true;
+        _horiWalls[0, 7] = true;
+        _horiWalls[1, 7] = true;
+        _horiWalls[2, 7] = true;
+        _horiWalls[7, 7] = true;
+        _horiWalls[8, 7] = true;
+        _horiWalls[1, 8] = true;
+        _horiWalls[2, 8] = true;
+        _horiWalls[6, 8] = true;
+        _horiWalls[9, 8] = true;
 
-        vertWalls[1, 0] = true;
-        vertWalls[2, 0] = true;
-        vertWalls[5, 0] = true;
-        vertWalls[6, 0] = true;
-        vertWalls[1, 1] = true;
-        vertWalls[0, 2] = true;
-        vertWalls[1, 2] = true;
-        vertWalls[2, 2] = true;
-        vertWalls[8, 2] = true;
-        vertWalls[1, 3] = true;
-        vertWalls[2, 3] = true;
-        vertWalls[3, 3] = true;
-        vertWalls[4, 3] = true;
-        vertWalls[6, 3] = true;
-        vertWalls[7, 3] = true;
-        vertWalls[9, 3] = true;
-        vertWalls[0, 4] = true;
-        vertWalls[3, 4] = true;
-        vertWalls[4, 4] = true;
-        vertWalls[7, 4] = true;
-        vertWalls[8, 4] = true;
-        vertWalls[1, 5] = true;
-        vertWalls[3, 5] = true;
-        vertWalls[7, 5] = true;
-        vertWalls[8, 5] = true;
-        vertWalls[0, 6] = true;
-        vertWalls[2, 6] = true;
-        vertWalls[3, 6] = true;
-        vertWalls[4, 6] = true;
-        vertWalls[7, 6] = true;
-        vertWalls[1, 7] = true;
-        vertWalls[3, 7] = true;
-        vertWalls[4, 7] = true;
-        vertWalls[6, 7] = true;
-        vertWalls[7, 7] = true;
-        vertWalls[8, 7] = true;
-        vertWalls[9, 7] = true;
-        vertWalls[2, 8] = true;
+        _vertWalls[1, 0] = true;
+        _vertWalls[2, 0] = true;
+        _vertWalls[5, 0] = true;
+        _vertWalls[6, 0] = true;
+        _vertWalls[1, 1] = true;
+        _vertWalls[0, 2] = true;
+        _vertWalls[1, 2] = true;
+        _vertWalls[2, 2] = true;
+        _vertWalls[8, 2] = true;
+        _vertWalls[1, 3] = true;
+        _vertWalls[2, 3] = true;
+        _vertWalls[3, 3] = true;
+        _vertWalls[4, 3] = true;
+        _vertWalls[6, 3] = true;
+        _vertWalls[7, 3] = true;
+        _vertWalls[9, 3] = true;
+        _vertWalls[0, 4] = true;
+        _vertWalls[3, 4] = true;
+        _vertWalls[4, 4] = true;
+        _vertWalls[7, 4] = true;
+        _vertWalls[8, 4] = true;
+        _vertWalls[1, 5] = true;
+        _vertWalls[3, 5] = true;
+        _vertWalls[7, 5] = true;
+        _vertWalls[8, 5] = true;
+        _vertWalls[0, 6] = true;
+        _vertWalls[2, 6] = true;
+        _vertWalls[3, 6] = true;
+        _vertWalls[4, 6] = true;
+        _vertWalls[7, 6] = true;
+        _vertWalls[1, 7] = true;
+        _vertWalls[3, 7] = true;
+        _vertWalls[4, 7] = true;
+        _vertWalls[6, 7] = true;
+        _vertWalls[7, 7] = true;
+        _vertWalls[8, 7] = true;
+        _vertWalls[9, 7] = true;
+        _vertWalls[2, 8] = true;
 
-        sphereColors = new int[] { 1, 2, 0, 3 };
-        goalFromTorusColor = new int[] { 0, 1, 3, 2 };
+        _sphereColors = new int[] { 1, 2, 0, 3 };
+        _goalFromTorusColor = new int[] { 0, 1, 3, 2 };
     }
 
     void generateMaze5()
     {
-        horiWalls[1, 0] = true;
-        horiWalls[2, 0] = true;
-        horiWalls[3, 0] = true;
-        horiWalls[4, 0] = true;
-        horiWalls[1, 1] = true;
-        horiWalls[2, 1] = true;
-        horiWalls[3, 1] = true;
-        horiWalls[2, 2] = true;
-        horiWalls[6, 2] = true;
-        horiWalls[8, 2] = true;
-        horiWalls[9, 2] = true;
-        horiWalls[3, 3] = true;
-        horiWalls[8, 3] = true;
-        horiWalls[2, 4] = true;
-        horiWalls[3, 4] = true;
-        horiWalls[4, 4] = true;
-        horiWalls[7, 4] = true;
-        horiWalls[2, 5] = true;
-        horiWalls[4, 5] = true;
-        horiWalls[5, 5] = true;
-        horiWalls[6, 5] = true;
-        horiWalls[7, 5] = true;
-        horiWalls[0, 6] = true;
-        horiWalls[1, 6] = true;
-        horiWalls[3, 6] = true;
-        horiWalls[4, 6] = true;
-        horiWalls[5, 6] = true;
-        horiWalls[6, 6] = true;
-        horiWalls[9, 6] = true;
-        horiWalls[1, 7] = true;
-        horiWalls[2, 7] = true;
-        horiWalls[4, 7] = true;
-        horiWalls[5, 7] = true;
-        horiWalls[7, 7] = true;
-        horiWalls[1, 8] = true;
-        horiWalls[2, 8] = true;
-        horiWalls[3, 8] = true;
-        horiWalls[7, 8] = true;
-        horiWalls[8, 8] = true;
+        _horiWalls[1, 0] = true;
+        _horiWalls[2, 0] = true;
+        _horiWalls[3, 0] = true;
+        _horiWalls[4, 0] = true;
+        _horiWalls[1, 1] = true;
+        _horiWalls[2, 1] = true;
+        _horiWalls[3, 1] = true;
+        _horiWalls[2, 2] = true;
+        _horiWalls[6, 2] = true;
+        _horiWalls[8, 2] = true;
+        _horiWalls[9, 2] = true;
+        _horiWalls[3, 3] = true;
+        _horiWalls[8, 3] = true;
+        _horiWalls[2, 4] = true;
+        _horiWalls[3, 4] = true;
+        _horiWalls[4, 4] = true;
+        _horiWalls[7, 4] = true;
+        _horiWalls[2, 5] = true;
+        _horiWalls[4, 5] = true;
+        _horiWalls[5, 5] = true;
+        _horiWalls[6, 5] = true;
+        _horiWalls[7, 5] = true;
+        _horiWalls[0, 6] = true;
+        _horiWalls[1, 6] = true;
+        _horiWalls[3, 6] = true;
+        _horiWalls[4, 6] = true;
+        _horiWalls[5, 6] = true;
+        _horiWalls[6, 6] = true;
+        _horiWalls[9, 6] = true;
+        _horiWalls[1, 7] = true;
+        _horiWalls[2, 7] = true;
+        _horiWalls[4, 7] = true;
+        _horiWalls[5, 7] = true;
+        _horiWalls[7, 7] = true;
+        _horiWalls[1, 8] = true;
+        _horiWalls[2, 8] = true;
+        _horiWalls[3, 8] = true;
+        _horiWalls[7, 8] = true;
+        _horiWalls[8, 8] = true;
 
-        vertWalls[2, 0] = true;
-        vertWalls[3, 0] = true;
-        vertWalls[4, 0] = true;
-        vertWalls[5, 0] = true;
-        vertWalls[3, 1] = true;
-        vertWalls[4, 1] = true;
-        vertWalls[6, 2] = true;
-        vertWalls[7, 2] = true;
-        vertWalls[2, 3] = true;
-        vertWalls[3, 3] = true;
-        vertWalls[5, 3] = true;
-        vertWalls[8, 3] = true;
-        vertWalls[1, 4] = true;
-        vertWalls[2, 4] = true;
-        vertWalls[3, 4] = true;
-        vertWalls[4, 4] = true;
-        vertWalls[9, 4] = true;
-        vertWalls[1, 5] = true;
-        vertWalls[2, 5] = true;
-        vertWalls[4, 5] = true;
-        vertWalls[5, 5] = true;
-        vertWalls[8, 5] = true;
-        vertWalls[9, 5] = true;
-        vertWalls[0, 6] = true;
-        vertWalls[1, 6] = true;
-        vertWalls[3, 6] = true;
-        vertWalls[4, 6] = true;
-        vertWalls[7, 6] = true;
-        vertWalls[1, 7] = true;
-        vertWalls[2, 7] = true;
-        vertWalls[3, 7] = true;
-        vertWalls[5, 7] = true;
-        vertWalls[6, 7] = true;
-        vertWalls[7, 7] = true;
-        vertWalls[0, 8] = true;
-        vertWalls[1, 8] = true;
-        vertWalls[4, 8] = true;
-        vertWalls[5, 8] = true;
-        vertWalls[7, 8] = true;
-        vertWalls[8, 8] = true;
+        _vertWalls[2, 0] = true;
+        _vertWalls[3, 0] = true;
+        _vertWalls[4, 0] = true;
+        _vertWalls[5, 0] = true;
+        _vertWalls[3, 1] = true;
+        _vertWalls[4, 1] = true;
+        _vertWalls[6, 2] = true;
+        _vertWalls[7, 2] = true;
+        _vertWalls[2, 3] = true;
+        _vertWalls[3, 3] = true;
+        _vertWalls[5, 3] = true;
+        _vertWalls[8, 3] = true;
+        _vertWalls[1, 4] = true;
+        _vertWalls[2, 4] = true;
+        _vertWalls[3, 4] = true;
+        _vertWalls[4, 4] = true;
+        _vertWalls[9, 4] = true;
+        _vertWalls[1, 5] = true;
+        _vertWalls[2, 5] = true;
+        _vertWalls[4, 5] = true;
+        _vertWalls[5, 5] = true;
+        _vertWalls[8, 5] = true;
+        _vertWalls[9, 5] = true;
+        _vertWalls[0, 6] = true;
+        _vertWalls[1, 6] = true;
+        _vertWalls[3, 6] = true;
+        _vertWalls[4, 6] = true;
+        _vertWalls[7, 6] = true;
+        _vertWalls[1, 7] = true;
+        _vertWalls[2, 7] = true;
+        _vertWalls[3, 7] = true;
+        _vertWalls[5, 7] = true;
+        _vertWalls[6, 7] = true;
+        _vertWalls[7, 7] = true;
+        _vertWalls[0, 8] = true;
+        _vertWalls[1, 8] = true;
+        _vertWalls[4, 8] = true;
+        _vertWalls[5, 8] = true;
+        _vertWalls[7, 8] = true;
+        _vertWalls[8, 8] = true;
 
-        sphereColors = new int[] { 3, 1, 0, 2 };
-        goalFromTorusColor = new int[] { 0, 2, 1, 3 };
+        _sphereColors = new int[] { 3, 1, 0, 2 };
+        _goalFromTorusColor = new int[] { 0, 2, 1, 3 };
     }
 
     void generateMaze2()
     {
-        horiWalls[1, 0] = true;
-        horiWalls[2, 0] = true;
-        horiWalls[3, 0] = true;
-        horiWalls[4, 0] = true;
-        horiWalls[5, 0] = true;
-        horiWalls[8, 0] = true;
-        horiWalls[2, 1] = true;
-        horiWalls[3, 1] = true;
-        horiWalls[4, 1] = true;
-        horiWalls[8, 1] = true;
-        horiWalls[9, 1] = true;
-        horiWalls[0, 2] = true;
-        horiWalls[1, 2] = true;
-        horiWalls[3, 2] = true;
-        horiWalls[4, 2] = true;
-        horiWalls[6, 2] = true;
-        horiWalls[7, 2] = true;
-        horiWalls[1, 3] = true;
-        horiWalls[4, 3] = true;
-        horiWalls[6, 3] = true;
-        horiWalls[8, 3] = true;
-        horiWalls[0, 4] = true;
-        horiWalls[2, 4] = true;
-        horiWalls[3, 4] = true;
-        horiWalls[5, 4] = true;
-        horiWalls[8, 4] = true;
-        horiWalls[1, 5] = true;
-        horiWalls[3, 5] = true;
-        horiWalls[4, 5] = true;
-        horiWalls[5, 5] = true;
-        horiWalls[9, 5] = true;
-        horiWalls[2, 6] = true;
-        horiWalls[3, 6] = true;
-        horiWalls[7, 6] = true;
-        horiWalls[8, 6] = true;
-        horiWalls[0, 7] = true;
-        horiWalls[3, 7] = true;
-        horiWalls[6, 7] = true;
-        horiWalls[7, 7] = true;
-        horiWalls[9, 7] = true;
-        horiWalls[1, 8] = true;
-        horiWalls[4, 8] = true;
-        horiWalls[5, 8] = true;
-        horiWalls[6, 8] = true;
-        horiWalls[8, 8] = true;
+        _horiWalls[1, 0] = true;
+        _horiWalls[2, 0] = true;
+        _horiWalls[3, 0] = true;
+        _horiWalls[4, 0] = true;
+        _horiWalls[5, 0] = true;
+        _horiWalls[8, 0] = true;
+        _horiWalls[2, 1] = true;
+        _horiWalls[3, 1] = true;
+        _horiWalls[4, 1] = true;
+        _horiWalls[8, 1] = true;
+        _horiWalls[9, 1] = true;
+        _horiWalls[0, 2] = true;
+        _horiWalls[1, 2] = true;
+        _horiWalls[3, 2] = true;
+        _horiWalls[4, 2] = true;
+        _horiWalls[6, 2] = true;
+        _horiWalls[7, 2] = true;
+        _horiWalls[1, 3] = true;
+        _horiWalls[4, 3] = true;
+        _horiWalls[6, 3] = true;
+        _horiWalls[8, 3] = true;
+        _horiWalls[0, 4] = true;
+        _horiWalls[2, 4] = true;
+        _horiWalls[3, 4] = true;
+        _horiWalls[5, 4] = true;
+        _horiWalls[8, 4] = true;
+        _horiWalls[1, 5] = true;
+        _horiWalls[3, 5] = true;
+        _horiWalls[4, 5] = true;
+        _horiWalls[5, 5] = true;
+        _horiWalls[9, 5] = true;
+        _horiWalls[2, 6] = true;
+        _horiWalls[3, 6] = true;
+        _horiWalls[7, 6] = true;
+        _horiWalls[8, 6] = true;
+        _horiWalls[0, 7] = true;
+        _horiWalls[3, 7] = true;
+        _horiWalls[6, 7] = true;
+        _horiWalls[7, 7] = true;
+        _horiWalls[9, 7] = true;
+        _horiWalls[1, 8] = true;
+        _horiWalls[4, 8] = true;
+        _horiWalls[5, 8] = true;
+        _horiWalls[6, 8] = true;
+        _horiWalls[8, 8] = true;
 
-        vertWalls[1, 0] = true;
-        vertWalls[6, 0] = true;
-        vertWalls[7, 0] = true;
-        vertWalls[2, 1] = true;
-        vertWalls[4, 1] = true;
-        vertWalls[5, 1] = true;
-        vertWalls[7, 1] = true;
-        vertWalls[8, 1] = true;
-        vertWalls[3, 2] = true;
-        vertWalls[8, 2] = true;
-        vertWalls[9, 2] = true;
-        vertWalls[2, 4] = true;
-        vertWalls[4, 4] = true;
-        vertWalls[6, 4] = true;
-        vertWalls[7, 4] = true;
-        vertWalls[1, 5] = true;
-        vertWalls[2, 5] = true;
-        vertWalls[5, 5] = true;
-        vertWalls[6, 5] = true;
-        vertWalls[3, 5] = true;
-        vertWalls[0, 6] = true;
-        vertWalls[1, 6] = true;
-        vertWalls[4, 6] = true;
-        vertWalls[5, 6] = true;
-        vertWalls[7, 6] = true;
-        vertWalls[9, 6] = true;
-        vertWalls[1, 7] = true;
-        vertWalls[5, 7] = true;
-        vertWalls[6, 7] = true;
-        vertWalls[8, 7] = true;
-        vertWalls[2, 8] = true;
-        vertWalls[3, 8] = true;
+        _vertWalls[1, 0] = true;
+        _vertWalls[6, 0] = true;
+        _vertWalls[7, 0] = true;
+        _vertWalls[2, 1] = true;
+        _vertWalls[4, 1] = true;
+        _vertWalls[5, 1] = true;
+        _vertWalls[7, 1] = true;
+        _vertWalls[8, 1] = true;
+        _vertWalls[3, 2] = true;
+        _vertWalls[8, 2] = true;
+        _vertWalls[9, 2] = true;
+        _vertWalls[2, 4] = true;
+        _vertWalls[4, 4] = true;
+        _vertWalls[6, 4] = true;
+        _vertWalls[7, 4] = true;
+        _vertWalls[1, 5] = true;
+        _vertWalls[2, 5] = true;
+        _vertWalls[5, 5] = true;
+        _vertWalls[6, 5] = true;
+        _vertWalls[3, 5] = true;
+        _vertWalls[0, 6] = true;
+        _vertWalls[1, 6] = true;
+        _vertWalls[4, 6] = true;
+        _vertWalls[5, 6] = true;
+        _vertWalls[7, 6] = true;
+        _vertWalls[9, 6] = true;
+        _vertWalls[1, 7] = true;
+        _vertWalls[5, 7] = true;
+        _vertWalls[6, 7] = true;
+        _vertWalls[8, 7] = true;
+        _vertWalls[2, 8] = true;
+        _vertWalls[3, 8] = true;
 
-        sphereColors = new int[] { 0, 3, 1, 2 };
-        goalFromTorusColor = new int[] { 1, 2, 0, 3 };
+        _sphereColors = new int[] { 0, 3, 1, 2 };
+        _goalFromTorusColor = new int[] { 1, 2, 0, 3 };
     }
 
     void generateMaze4()
     {
-        horiWalls[8, 0] = true;
-        horiWalls[9, 0] = true;
-        horiWalls[1, 1] = true;
-        horiWalls[2, 1] = true;
-        horiWalls[5, 1] = true;
-        horiWalls[6, 1] = true;
-        horiWalls[7, 1] = true;
-        horiWalls[8, 1] = true;
-        horiWalls[0, 2] = true;
-        horiWalls[2, 2] = true;
-        horiWalls[3, 2] = true;
-        horiWalls[4, 2] = true;
-        horiWalls[6, 2] = true;
-        horiWalls[8, 2] = true;
-        horiWalls[2, 3] = true;
-        horiWalls[3, 3] = true;
-        horiWalls[5, 3] = true;
-        horiWalls[6, 3] = true;
-        horiWalls[7, 3] = true;
-        horiWalls[1, 4] = true;
-        horiWalls[2, 4] = true;
-        horiWalls[6, 4] = true;
-        horiWalls[7, 4] = true;
-        horiWalls[8, 4] = true;
-        horiWalls[0, 5] = true;
-        horiWalls[1, 5] = true;
-        horiWalls[2, 5] = true;
-        horiWalls[3, 5] = true;
-        horiWalls[8, 5] = true;
-        horiWalls[7, 5] = true;
-        horiWalls[1, 6] = true;
-        horiWalls[2, 6] = true;
-        horiWalls[3, 6] = true;
-        horiWalls[4, 6] = true;
-        horiWalls[9, 6] = true;
-        horiWalls[2, 7] = true;
-        horiWalls[6, 7] = true;
-        horiWalls[7, 7] = true;
-        horiWalls[1, 8] = true;
-        horiWalls[2, 8] = true;
-        horiWalls[5, 8] = true;
-        horiWalls[6, 8] = true;
-        horiWalls[8, 8] = true;
+        _horiWalls[8, 0] = true;
+        _horiWalls[9, 0] = true;
+        _horiWalls[1, 1] = true;
+        _horiWalls[2, 1] = true;
+        _horiWalls[5, 1] = true;
+        _horiWalls[6, 1] = true;
+        _horiWalls[7, 1] = true;
+        _horiWalls[8, 1] = true;
+        _horiWalls[0, 2] = true;
+        _horiWalls[2, 2] = true;
+        _horiWalls[3, 2] = true;
+        _horiWalls[4, 2] = true;
+        _horiWalls[6, 2] = true;
+        _horiWalls[8, 2] = true;
+        _horiWalls[2, 3] = true;
+        _horiWalls[3, 3] = true;
+        _horiWalls[5, 3] = true;
+        _horiWalls[6, 3] = true;
+        _horiWalls[7, 3] = true;
+        _horiWalls[1, 4] = true;
+        _horiWalls[2, 4] = true;
+        _horiWalls[6, 4] = true;
+        _horiWalls[7, 4] = true;
+        _horiWalls[8, 4] = true;
+        _horiWalls[0, 5] = true;
+        _horiWalls[1, 5] = true;
+        _horiWalls[2, 5] = true;
+        _horiWalls[3, 5] = true;
+        _horiWalls[8, 5] = true;
+        _horiWalls[7, 5] = true;
+        _horiWalls[1, 6] = true;
+        _horiWalls[2, 6] = true;
+        _horiWalls[3, 6] = true;
+        _horiWalls[4, 6] = true;
+        _horiWalls[9, 6] = true;
+        _horiWalls[2, 7] = true;
+        _horiWalls[6, 7] = true;
+        _horiWalls[7, 7] = true;
+        _horiWalls[1, 8] = true;
+        _horiWalls[2, 8] = true;
+        _horiWalls[5, 8] = true;
+        _horiWalls[6, 8] = true;
+        _horiWalls[8, 8] = true;
 
-        vertWalls[1, 0] = true;
-        vertWalls[4, 0] = true;
-        vertWalls[7, 0] = true;
-        vertWalls[8, 0] = true;
-        vertWalls[0, 1] = true;
-        vertWalls[5, 1] = true;
-        vertWalls[1, 2] = true;
-        vertWalls[7, 2] = true;
-        vertWalls[0, 3] = true;
-        vertWalls[1, 3] = true;
-        vertWalls[4, 3] = true;
-        vertWalls[5, 3] = true;
-        vertWalls[8, 3] = true;
-        vertWalls[9, 3] = true;
-        vertWalls[1, 4] = true;
-        vertWalls[2, 4] = true;
-        vertWalls[3, 4] = true;
-        vertWalls[4, 4] = true;
-        vertWalls[5, 4] = true;
-        vertWalls[6, 4] = true;
-        vertWalls[7, 4] = true;
-        vertWalls[8, 4] = true;
-        vertWalls[0, 5] = true;
-        vertWalls[5, 5] = true;
-        vertWalls[6, 5] = true;
-        vertWalls[1, 6] = true;
-        vertWalls[3, 6] = true;
-        vertWalls[6, 6] = true;
-        vertWalls[7, 7] = true;
-        vertWalls[8, 7] = true;
-        vertWalls[3, 8] = true;
-        vertWalls[4, 8] = true;
-        vertWalls[6, 8] = true;
-        vertWalls[8, 8] = true;
+        _vertWalls[1, 0] = true;
+        _vertWalls[4, 0] = true;
+        _vertWalls[7, 0] = true;
+        _vertWalls[8, 0] = true;
+        _vertWalls[0, 1] = true;
+        _vertWalls[5, 1] = true;
+        _vertWalls[1, 2] = true;
+        _vertWalls[7, 2] = true;
+        _vertWalls[0, 3] = true;
+        _vertWalls[1, 3] = true;
+        _vertWalls[4, 3] = true;
+        _vertWalls[5, 3] = true;
+        _vertWalls[8, 3] = true;
+        _vertWalls[9, 3] = true;
+        _vertWalls[1, 4] = true;
+        _vertWalls[2, 4] = true;
+        _vertWalls[3, 4] = true;
+        _vertWalls[4, 4] = true;
+        _vertWalls[5, 4] = true;
+        _vertWalls[6, 4] = true;
+        _vertWalls[7, 4] = true;
+        _vertWalls[8, 4] = true;
+        _vertWalls[0, 5] = true;
+        _vertWalls[5, 5] = true;
+        _vertWalls[6, 5] = true;
+        _vertWalls[1, 6] = true;
+        _vertWalls[3, 6] = true;
+        _vertWalls[6, 6] = true;
+        _vertWalls[7, 7] = true;
+        _vertWalls[8, 7] = true;
+        _vertWalls[3, 8] = true;
+        _vertWalls[4, 8] = true;
+        _vertWalls[6, 8] = true;
+        _vertWalls[8, 8] = true;
 
-        sphereColors = new int[] { 3, 0, 2, 1 };
-        goalFromTorusColor = new int[] { 2, 1, 3, 0 };
+        _sphereColors = new int[] { 3, 0, 2, 1 };
+        _goalFromTorusColor = new int[] { 2, 1, 3, 0 };
     }
 
     void generateMaze6()
     {
-        horiWalls[1, 0] = true;
-        horiWalls[3, 0] = true;
-        horiWalls[4, 0] = true;
-        horiWalls[7, 0] = true;
-        horiWalls[8, 0] = true;
-        horiWalls[2, 1] = true;
-        horiWalls[4, 1] = true;
-        horiWalls[5, 1] = true;
-        horiWalls[8, 1] = true;
-        horiWalls[1, 2] = true;
-        horiWalls[2, 2] = true;
-        horiWalls[3, 2] = true;
-        horiWalls[4, 2] = true;
-        horiWalls[6, 2] = true;
-        horiWalls[2, 3] = true;
-        horiWalls[5, 3] = true;
-        horiWalls[7, 3] = true;
-        horiWalls[8, 3] = true;
-        horiWalls[0, 4] = true;
-        horiWalls[6, 4] = true;
-        horiWalls[7, 4] = true;
-        horiWalls[9, 4] = true;
-        horiWalls[2, 5] = true;
-        horiWalls[3, 5] = true;
-        horiWalls[6, 5] = true;
-        horiWalls[8, 5] = true;
-        horiWalls[1, 6] = true;
-        horiWalls[2, 6] = true;
-        horiWalls[4, 6] = true;
-        horiWalls[5, 6] = true;
-        horiWalls[7, 6] = true;
-        horiWalls[3, 7] = true;
-        horiWalls[5, 7] = true;
-        horiWalls[6, 7] = true;
-        horiWalls[2, 8] = true;
-        horiWalls[4, 8] = true;
-        horiWalls[7, 8] = true;
-        horiWalls[8, 8] = true;
+        _horiWalls[1, 0] = true;
+        _horiWalls[3, 0] = true;
+        _horiWalls[4, 0] = true;
+        _horiWalls[7, 0] = true;
+        _horiWalls[8, 0] = true;
+        _horiWalls[2, 1] = true;
+        _horiWalls[4, 1] = true;
+        _horiWalls[5, 1] = true;
+        _horiWalls[8, 1] = true;
+        _horiWalls[1, 2] = true;
+        _horiWalls[2, 2] = true;
+        _horiWalls[3, 2] = true;
+        _horiWalls[4, 2] = true;
+        _horiWalls[6, 2] = true;
+        _horiWalls[2, 3] = true;
+        _horiWalls[5, 3] = true;
+        _horiWalls[7, 3] = true;
+        _horiWalls[8, 3] = true;
+        _horiWalls[0, 4] = true;
+        _horiWalls[6, 4] = true;
+        _horiWalls[7, 4] = true;
+        _horiWalls[9, 4] = true;
+        _horiWalls[2, 5] = true;
+        _horiWalls[3, 5] = true;
+        _horiWalls[6, 5] = true;
+        _horiWalls[8, 5] = true;
+        _horiWalls[1, 6] = true;
+        _horiWalls[2, 6] = true;
+        _horiWalls[4, 6] = true;
+        _horiWalls[5, 6] = true;
+        _horiWalls[7, 6] = true;
+        _horiWalls[3, 7] = true;
+        _horiWalls[5, 7] = true;
+        _horiWalls[6, 7] = true;
+        _horiWalls[2, 8] = true;
+        _horiWalls[4, 8] = true;
+        _horiWalls[7, 8] = true;
+        _horiWalls[8, 8] = true;
 
-        vertWalls[1, 0] = true;
-        vertWalls[2, 0] = true;
-        vertWalls[3, 0] = true;
-        vertWalls[5, 0] = true;
-        vertWalls[7, 0] = true;
-        vertWalls[8, 0] = true;
-        vertWalls[4, 1] = true;
-        vertWalls[5, 1] = true;
-        vertWalls[6, 1] = true;
-        vertWalls[8, 1] = true;
-        vertWalls[9, 1] = true;
-        vertWalls[1, 2] = true;
-        vertWalls[2, 2] = true;
-        vertWalls[4, 2] = true;
-        vertWalls[7, 2] = true;
-        vertWalls[3, 3] = true;
-        vertWalls[4, 3] = true;
-        vertWalls[8, 3] = true;
-        vertWalls[4, 4] = true;
-        vertWalls[5, 4] = true;
-        vertWalls[6, 4] = true;
-        vertWalls[0, 5] = true;
-        vertWalls[1, 5] = true;
-        vertWalls[3, 5] = true;
-        vertWalls[8, 5] = true;
-        vertWalls[9, 5] = true;
-        vertWalls[1, 6] = true;
-        vertWalls[2, 6] = true;
-        vertWalls[4, 6] = true;
-        vertWalls[6, 6] = true;
-        vertWalls[2, 7] = true;
-        vertWalls[3, 7] = true;
-        vertWalls[5, 7] = true;
-        vertWalls[7, 7] = true;
-        vertWalls[8, 7] = true;
-        vertWalls[3, 8] = true;
-        vertWalls[4, 8] = true;
-        vertWalls[6, 8] = true;
-        vertWalls[7, 8] = true;
+        _vertWalls[1, 0] = true;
+        _vertWalls[2, 0] = true;
+        _vertWalls[3, 0] = true;
+        _vertWalls[5, 0] = true;
+        _vertWalls[7, 0] = true;
+        _vertWalls[8, 0] = true;
+        _vertWalls[4, 1] = true;
+        _vertWalls[5, 1] = true;
+        _vertWalls[6, 1] = true;
+        _vertWalls[8, 1] = true;
+        _vertWalls[9, 1] = true;
+        _vertWalls[1, 2] = true;
+        _vertWalls[2, 2] = true;
+        _vertWalls[4, 2] = true;
+        _vertWalls[7, 2] = true;
+        _vertWalls[3, 3] = true;
+        _vertWalls[4, 3] = true;
+        _vertWalls[8, 3] = true;
+        _vertWalls[4, 4] = true;
+        _vertWalls[5, 4] = true;
+        _vertWalls[6, 4] = true;
+        _vertWalls[0, 5] = true;
+        _vertWalls[1, 5] = true;
+        _vertWalls[3, 5] = true;
+        _vertWalls[8, 5] = true;
+        _vertWalls[9, 5] = true;
+        _vertWalls[1, 6] = true;
+        _vertWalls[2, 6] = true;
+        _vertWalls[4, 6] = true;
+        _vertWalls[6, 6] = true;
+        _vertWalls[2, 7] = true;
+        _vertWalls[3, 7] = true;
+        _vertWalls[5, 7] = true;
+        _vertWalls[7, 7] = true;
+        _vertWalls[8, 7] = true;
+        _vertWalls[3, 8] = true;
+        _vertWalls[4, 8] = true;
+        _vertWalls[6, 8] = true;
+        _vertWalls[7, 8] = true;
 
-        sphereColors = new int[] { 2, 3, 0, 1 };
-        goalFromTorusColor = new int[] { 0, 1, 3, 2 };
+        _sphereColors = new int[] { 2, 3, 0, 1 };
+        _goalFromTorusColor = new int[] { 0, 1, 3, 2 };
     }
 
 #pragma warning disable 414
@@ -1082,6 +1065,59 @@ public class MouseInTheMazeModule : MonoBehaviour
         }
 
         return btns.ToArray();
+    }
+
+    struct CamQueueItem
+    {
+        public CameraPosition OldPos;
+        public CameraPosition NewPos;
+        public int Button;
+    }
+
+    IEnumerator TwitchHandleForcedSolve()
+    {
+        if (_isSolved)
+            yield break;
+
+        // 1=forward, 2=backward, 3=turn left, 4=turn right
+        var q = new Queue<CamQueueItem>();
+        var already = new Dictionary<CameraPosition, CamQueueItem>();
+        q.Enqueue(new CamQueueItem { OldPos = null, NewPos = _curCam, Button = 0 });
+        CameraPosition goalCam = null;
+        while (q.Count > 0)
+        {
+            var item = q.Dequeue();
+            if (already.ContainsKey(item.NewPos))
+                continue;
+            already[item.NewPos] = item;
+            if (item.NewPos.IsGoal(_goalPosition))
+            {
+                goalCam = item.NewPos;
+                break;
+            }
+
+            var options = new[] { item.NewPos.MoveForward(_horiWalls, _vertWalls), item.NewPos.MoveBackward(_horiWalls, _vertWalls), item.NewPos.TurnLeft(), item.NewPos.TurnRight() };
+            for (var i = 0; i < options.Length; i++)
+                if (options[i] != null)
+                    q.Enqueue(new CamQueueItem { OldPos = item.NewPos, NewPos = options[i], Button = i + 1 });
+        }
+
+        var btns = new List<int>();
+        var pos = goalCam;
+        while (pos != null)
+        {
+            btns.Add(already[pos].Button);
+            pos = already[pos].OldPos;
+        }
+        for (int i = btns.Count - 2; i >= 0; i--)
+        {
+            buttons[btns[i]].OnInteract();
+            yield return new WaitForSeconds(.1f);
+        }
+        while (_queue.Count > 0)
+            yield return true;
+        yield return new WaitForSeconds(.1f);
+        buttons[0].OnInteract();
     }
 }
 
