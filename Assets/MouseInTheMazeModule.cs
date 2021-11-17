@@ -2,6 +2,7 @@
 using System.Collections;
 using System.Collections.Generic;
 using System.Linq;
+using System.Text.RegularExpressions;
 using UnityEngine;
 
 using Random = UnityEngine.Random;
@@ -9,6 +10,7 @@ using Random = UnityEngine.Random;
 public class MouseInTheMazeModule : MonoBehaviour
 {
     public KMSelectable[] buttons;
+    public KMSelectable module;
     public Camera TargetCamera;
     public Material Mat;
     public Material MatWall;
@@ -27,11 +29,13 @@ public class MouseInTheMazeModule : MonoBehaviour
     int _goalPosition;
     int[] _goalFromTorusColor;
     CameraPosition _curCam;
+    bool _isSelected;
 
     private bool _isActive;
     private static int _moduleIdCounter = 1;
     private int _moduleId;
     private bool _isSolved = false;
+    private bool _tpMazeTemporarilyDisabled = false;
 
     sealed class CameraPosition : IEquatable<CameraPosition>
     {
@@ -86,7 +90,7 @@ public class MouseInTheMazeModule : MonoBehaviour
 
     void Update()
     {
-        if (!_isActive)
+        if (!_isActive || _tpMazeTemporarilyDisabled)
             return;
 
         // Floor and Ceiling
@@ -263,6 +267,20 @@ public class MouseInTheMazeModule : MonoBehaviour
             _myBlock,
             false,
             false);
+
+        if (_isSelected)
+        {
+            if (Input.GetKeyDown(KeyCode.W) || Input.GetKeyDown(KeyCode.UpArrow) || Input.GetKeyDown(KeyCode.Keypad8))
+                buttons[1].OnInteract();
+            else if (Input.GetKeyDown(KeyCode.S) || Input.GetKeyDown(KeyCode.DownArrow) || Input.GetKeyDown(KeyCode.Keypad2))
+                buttons[2].OnInteract();
+            else if (Input.GetKeyDown(KeyCode.A) || Input.GetKeyDown(KeyCode.LeftArrow) || Input.GetKeyDown(KeyCode.Keypad4))
+                buttons[3].OnInteract();
+            else if (Input.GetKeyDown(KeyCode.D) || Input.GetKeyDown(KeyCode.RightArrow) || Input.GetKeyDown(KeyCode.Keypad6))
+                buttons[4].OnInteract();
+            else if (Input.GetKeyDown(KeyCode.KeypadEnter) || Input.GetKeyDown(KeyCode.Return) || Input.GetKeyDown(KeyCode.Space))
+                buttons[0].OnInteract();
+        }
     }
 
     void Start()
@@ -271,6 +289,8 @@ public class MouseInTheMazeModule : MonoBehaviour
         _isActive = false;
 
         GetComponent<KMBombModule>().OnActivate += OnActivate;
+        module.OnFocus += delegate { _isSelected = true; };
+        module.OnDefocus += delegate { _isSelected = false; };
 
         for (int i = 0; i < buttons.Length; i++)
         {
@@ -1013,11 +1033,22 @@ public class MouseInTheMazeModule : MonoBehaviour
     }
 
 #pragma warning disable 414
-    private string TwitchHelpMessage = @"Move with “!{0} forward back”. Turn with “!{0} left right u-turn”. Submit with “!{0} submit”. The first letter only can be used instead.";
+    private string TwitchHelpMessage = @"!{0} f[orward] b[ack] l[eft] r[ight] u[-turn] | !{0} submit | !{0} enablemaze/disablemaze [to sidestep visual glitches with other modules]";
 #pragma warning restore 414
 
     KMSelectable[] ProcessTwitchCommand(string command)
     {
+        if (Regex.IsMatch(command, @"^\s*disablemaze\s*$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+        {
+            _tpMazeTemporarilyDisabled = true;
+            return new KMSelectable[0];
+        }
+        if (Regex.IsMatch(command, @"^\s*enablemaze\s*$", RegexOptions.IgnoreCase | RegexOptions.CultureInvariant))
+        {
+            _tpMazeTemporarilyDisabled = false;
+            return new KMSelectable[0];
+        }
+
         var btns = new List<KMSelectable>();
         var pieces = command.Trim().ToLowerInvariant().Split(new[] { ' ', ',' }, StringSplitOptions.RemoveEmptyEntries);
 
@@ -1078,6 +1109,9 @@ public class MouseInTheMazeModule : MonoBehaviour
     {
         if (_isSolved)
             yield break;
+
+        _tpMazeTemporarilyDisabled = false;
+        yield return null;
 
         // 1=forward, 2=backward, 3=turn left, 4=turn right
         var q = new Queue<CamQueueItem>();
